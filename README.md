@@ -31,4 +31,8 @@ git pull https://github.com/KameNiTheOne/epl-bot
 
 ![Безыsgsgмянный](https://github.com/user-attachments/assets/fc60c85c-3e6e-40e7-bb38-fa41c1051f69)
 
-Ctrl+Shift+P -> NuGet: Add NuGet Package -> Устанавливаем(Если просит)
+Ctrl+Shift+P -> NuGet: Add NuGet Package -> Устанавливаем(Если просит) .NET SDK 8 с чем-то версии -> Newtonsoft.json, LlamaSharp, LLamaSharp.Backend.CPU, LLamaSharp.Backend.Cuda12, LLamaSharp.Backend.Vulkan, Telegram.Bot (всё последних версий)
+
+После установки пакетов должны пропасть критические ошибки.
+
+Заменяем путь к конфиг-файлу в Program.cs на путь к конфиг-файлу в проекте. Готово!
