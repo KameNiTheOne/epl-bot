@@ -181,7 +181,7 @@ class Program
         }
         catch (Exception) 
         {
-            Console.WriteLine("Failed to edit message!");
+            Console.WriteLine("Failed to edit message in one attempt! Batch won't be cleared.");
             flag = false;
         }
         if (flag)

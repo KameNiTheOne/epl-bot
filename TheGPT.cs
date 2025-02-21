@@ -1,19 +1,14 @@
 ﻿using LLama.Common;
 using LLama;
-using Telegram.Bot.Types;
-using LLama.Native;
 using LLama.Sampling;
-using System.Diagnostics;
-using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
-using Telegram.Bot.Exceptions;
 using TelegramBotik.instruments;
 
 namespace TelegramBotik
 {
     public static class TheGPT
     {
-        static string modelPath = @"C:\codes\epl_embedder\qwen2.5-7b-instruct-q5_k_m-00001-of-00002.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
+        static string modelPath = @"C:\Users\alext\Downloads\Qwen2.5-7B.Q5_K_M.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
         static LLamaWeights? model;
         static LLamaContext? context;
         static InteractiveExecutor? executor;
