@@ -30,3 +30,5 @@ git init
 git pull https://github.com/KameNiTheOne/epl-bot
 
 ![Безыsgsgмянный](https://github.com/user-attachments/assets/fc60c85c-3e6e-40e7-bb38-fa41c1051f69)
+
+Ctrl+Shift+P -> NuGet: Add NuGet Package -> Устанавливаем(Если просит)
