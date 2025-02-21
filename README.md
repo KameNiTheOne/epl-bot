@@ -6,11 +6,11 @@ Setup:
 2. Создаём рабочую папку и проект.
 Открываем папку в Visual Studio Code, заходим в расширения, 
 ![Безыsgsgмянный](https://github.com/user-attachments/assets/0e6867e5-2a1b-4183-9886-7b7cd20ecc0c)
-
 качаем C# Dev Kit,
+
 ![Безыsgsgмянный](https://github.com/user-attachments/assets/c965a634-3b31-426c-815f-b69c7c3034ac)
 
-4.  git pull-аем этот репозиторий в эту папку:
+3.  git pull-аем этот репозиторий в эту папку:
 ![Безыsgsgмянный](https://github.com/user-attachments/assets/22bcd6c8-aee7-4817-b9a3-939d0c6d293c)
 
 git init
