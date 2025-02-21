@@ -4,8 +4,10 @@ Easy Peasy Lawyer main repository
 Setup:
 1. Устанавливаем git.
 2. Создаём рабочую папку и проект.
-Открываем папку в Visual Studio Code, заходим в расширения, качаем C# Dev Kit, 
+Открываем папку в Visual Studio Code, заходим в расширения, 
 ![Безыsgsgмянный](https://github.com/user-attachments/assets/0e6867e5-2a1b-4183-9886-7b7cd20ecc0c)
+
+качаем C# Dev Kit,
 ![Безыsgsgмянный](https://github.com/user-attachments/assets/c965a634-3b31-426c-815f-b69c7c3034ac)
 
 4.  git pull-аем этот репозиторий в эту папку:
