@@ -21,7 +21,7 @@ class Program
     static string batch;
     static int batch_size = 5;
     static int currentMessageSize = 0;
-    static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на True
+    static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменяй на true
     public static string pathToConfig = @"C:\Users\alext\OneDrive\Документы\codeshinenegans\TelegramBotik\TelegramBotik\config.json"; // Измени на свой путь к конфиг файлу
 
     static async Task Main()
