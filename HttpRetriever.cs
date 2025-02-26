@@ -4,7 +4,6 @@ using System.Text.Json;
 
 namespace TelegramBotik.instruments
 {
-
     public static class HttpRetriever
     {
         private class Documents
@@ -18,14 +17,14 @@ namespace TelegramBotik.instruments
                 Texts = new List<string>();
                 Urls = new List<string>();
             }
-            public List<Document> GetDocuments()
+            public List<RetrieverDocument> GetDocuments()
             {
                 using var texts = Texts.GetEnumerator();
                 using var urls = Urls.GetEnumerator();
-                List<Document> result = new List<Document>();
+                List<RetrieverDocument> result = new();
                 while (texts.MoveNext() && urls.MoveNext())
                 {
-                    result.Add(new Document(texts.Current, urls.Current));
+                    result.Add(new RetrieverDocument(texts.Current, urls.Current));
                 }
                 return result;
             }
@@ -41,10 +40,16 @@ namespace TelegramBotik.instruments
                     _value = Encoding.UTF8.GetString(Encoding.Default.GetBytes(value));
                 }
             }
-            public string Url { get; set; } = string.Empty;
-            public Document(string _value, string _url)
+            public Document(string _value)
             {
                 Value = _value;
+            }
+        }
+        public class RetrieverDocument : Document
+        {
+            public string Url { get; set; } = string.Empty;
+            public RetrieverDocument(string _value, string _url) : base(_value)
+            {
                 Url = _url;
             }
         }
@@ -59,15 +64,15 @@ namespace TelegramBotik.instruments
             client = new HttpClient();
             http = _http;
         }
-        private static async Task<string> post<T>(string _case, T obj)
+        public static async Task<string> Post<T>(string _http, string _case, T obj)
         {
             StringContent content = new StringContent(JsonConvert.SerializeObject(obj));
-            using var response = await client.PostAsync($"{http}{_case}", content);
+            using var response = await client.PostAsync($"{_http}{_case}", content);
             return await response.Content.ReadAsStringAsync();
         }
-        public static async Task<List<Document>> PostQuery(string text)
+        public static async Task<List<RetrieverDocument>> PostQuery(string text)
         {
-            string response = await post(@"/query", new Text { Value = text });
+            string response = await Post(http, @"/query", new Text { Value = text });
             Documents convert = JsonConvert.DeserializeObject<Documents>(response);
             return convert.GetDocuments();
         }

@@ -12,7 +12,6 @@ namespace TelegramBotik
         static LLamaWeights? model;
         static LLamaContext? context;
         static InteractiveExecutor? executor;
-        static Dictionary<string, ChatSession> user_histories = new();
         static InferenceParams? inferenceParams;
         static string patternToTrim = @"(\bUser\W)|(\bAssistant\W)|(\bSystem\W)";
         public static void Initialize(uint _ContextSize, int _GpuLayerCount)
@@ -66,6 +65,52 @@ namespace TelegramBotik
             }
             mainsession.LoadSession(resetSession);
             return CleanGPTResponse(result);
+        }
+        public static async Task<List<string>> AsyncSummarizeDocs(List<string> docs)
+        {
+            Dictionary<Task<string>, string> tasks = new();
+            tasks[SummarizeDoc(docs.First())] = "0";
+            docs.RemoveAt(0);
+            List<(string, string)> order = new() { ("0", "None") };
+
+            foreach (string id in Configuration.GPTHosts.Keys)
+            {
+                tasks[HttpRetriever.Post(@$"http://{Configuration.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
+                docs.RemoveAt(0);
+                order.Add((id, "None"));
+            }
+            while (docs.Count > 0)
+            {
+                Task<string> finishedTask = await Task.WhenAny(tasks.Keys);
+
+                int index = order.FindIndex(new Predicate<(string, string)>(x => { return x.Item1 == tasks[finishedTask] && x.Item2 == "None"; }));
+                string id = order[index].Item1; 
+                order[index] = (order[index].Item1, await finishedTask);
+
+                tasks.Remove(finishedTask);
+                tasks[HttpRetriever.Post(@$"http://{Configuration.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
+                docs.RemoveAt(0);
+                order.Add((id, "None"));
+            }
+            List<string> result = new();
+            foreach(var doc in order)
+            {
+                result.Add(doc.Item2);
+            }
+            return result;
+        }
+        public static async Task<List<string>> SummarizeDocs(List<string> docs)
+        {
+            if (Program.useSummarizerCluster)
+            {
+                return await AsyncSummarizeDocs(docs);
+            }
+            List<string> result = new();
+            foreach (var doc in docs)
+            {
+                result.Add(await SummarizeDoc(doc));
+            }
+            return result;
         }
         public static async Task<string> SummarizeDoc(string doc, bool showHistory = false)
         {

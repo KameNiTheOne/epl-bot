@@ -19,56 +19,100 @@ class Program
     static int messageId;
     static string gpt_response;
     static string batch;
-    static int batch_size = 5;
     static int currentMessageSize = 0;
+    static int batch_size = 5;
+
+    //Переменные для настройки бота и GPT
     static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на True
     public static string pathToConfig = @"C:\Users\alext\OneDrive\Документы\codeshinenegans\TelegramBotik\TelegramBotik\config.json"; // Измени на свой путь к конфиг файлу
+    public static uint contextSize = 8192; // Кол-во токенов, которые может обработать GPT, можно попробовать увеличить, если модель ничего не генерирует
+    public static int layersToGPU = 18; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай.
+    static bool isGPTSummarizer = true; // Режим телеграмм-бот(false) или GPT для суммаризации документов(true)
+    static string GPTSummarizerID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
+    public static bool useSummarizerCluster = false;
 
     static async Task Main()
     {
-        NativeLibraryConfig.All.WithLogCallback(delegate (LLamaLogLevel level, string message) { Console.Write($"{level}: {message}"); });
-
-        _botClient = new TelegramBotClient("7316728850:AAHE1Kp7iknvSCa-cks6lzlo5cabB_5K6Ao"); // Присваиваем нашей переменной значение, в параметре передаем Token, полученный от BotFather
-        _receiverOptions = new ReceiverOptions // Также присваем значение настройкам бота
-        {
-            AllowedUpdates = new[] // Тут указываем типы получаемых Update`ов, о них подробнее расказано тут https://core.telegram.org/bots/api#update
-            {
-                UpdateType.Message, // Сообщения (текст, фото/видео, голосовые/видео сообщения и т.д.)
-            },
-            // Параметр, отвечающий за обработку сообщений, пришедших за то время, когда ваш бот был оффлайн
-            // True - не обрабатывать, False (стоит по умолчанию) - обрабаывать
-            DropPendingUpdates = true,
-        };
-
-        using var cts = new CancellationTokenSource();
-
-        // UpdateHander - обработчик приходящих Update`ов
-        // ErrorHandler - обработчик ошибок, связанных с Bot API
-        _botClient.StartReceiving(UpdateHandler, ErrorHandler, _receiverOptions, cts.Token); // Запускаем бота
-
-        var me = await _botClient.GetMe(); // Создаем переменную, в которую помещаем информацию о нашем боте.
-
-        if (!telegramBotDebug)
+        if (isGPTSummarizer)
         {
             Configuration.Initialize();
-            TheGPT.Initialize(8192, 18);
-            HttpRetriever.Initialize($"http://{Configuration.HostIP}:8000");
+            if(Configuration.GPTHosts.TryGetValue(GPTSummarizerID, out string ip))
+            {
+                Console.WriteLine("ID is in Hosts!");
+                if(ip != GPTServer.GetLocalIPAddress())
+                {
+                    Configuration.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
+                    Configuration.SaveConfigfile();
+                    Console.WriteLine("LocalIP of GPT server doesn't match one on Github! IP has been saved to file, please push to github!");
+                }
+                else
+                {
+                    Console.WriteLine("LocalIP of host matches saved IP.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("New GPTHost!");
+                Configuration.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
+                Configuration.SaveConfigfile();
+            }
+            TheGPT.Initialize(contextSize, layersToGPU);
+            GPTServer.Initialize();
         }
+        else
+        {
+            NativeLibraryConfig.All.WithLogCallback(delegate (LLamaLogLevel level, string message) { Console.Write($"{level}: {message}"); });
 
-        Console.WriteLine($"{me.FirstName} запущен!");
+            _botClient = new TelegramBotClient("7316728850:AAHE1Kp7iknvSCa-cks6lzlo5cabB_5K6Ao"); // Присваиваем нашей переменной значение, в параметре передаем Token, полученный от BotFather
+            _receiverOptions = new ReceiverOptions // Также присваем значение настройкам бота
+            {
+                AllowedUpdates = new[] // Тут указываем типы получаемых Update`ов, о них подробнее расказано тут https://core.telegram.org/bots/api#update
+                {
+                UpdateType.Message, // Сообщения (текст, фото/видео, голосовые/видео сообщения и т.д.)
+            },
+                // Параметр, отвечающий за обработку сообщений, пришедших за то время, когда ваш бот был оффлайн
+                // True - не обрабатывать, False (стоит по умолчанию) - обрабаывать
+                DropPendingUpdates = true,
+            };
 
-        await Task.Delay(-1); // Устанавливаем бесконечную задержку, чтобы наш бот работал постоянно
+            using var cts = new CancellationTokenSource();
+
+            // UpdateHander - обработчик приходящих Update`ов
+            // ErrorHandler - обработчик ошибок, связанных с Bot API
+            _botClient.StartReceiving(UpdateHandler, ErrorHandler, _receiverOptions, cts.Token); // Запускаем бота
+
+            var me = await _botClient.GetMe(); // Создаем переменную, в которую помещаем информацию о нашем боте.
+
+            if (!telegramBotDebug)
+            {
+                Configuration.Initialize();
+                TheGPT.Initialize(contextSize, layersToGPU);
+                HttpRetriever.Initialize($"http://{Configuration.HostIP}:8000");
+            }
+
+            Console.WriteLine($"{me.FirstName} запущен!");
+
+            await Task.Delay(-1); // Устанавливаем бесконечную задержку, чтобы наш бот работал постоянно
+        }
     }
-    private static async Task<(string, string)> getFormatedTextsAndUrlsFromDocs(List<HttpRetriever.Document> docs)
+    private static async Task<(string, string)> getFormatedTextsAndUrlsFromDocs(List<HttpRetriever.RetrieverDocument> docs)
     {
         string resultTexts = "";
         string resultUrls = "\n";
         int counter = 1;
-        foreach (HttpRetriever.Document doc in docs) 
+        List<string> urls = new();
+        List<string> texts = new();
+        foreach (HttpRetriever.RetrieverDocument doc in docs)
         {
-            string summarization = telegramBotDebug ? doc.Value : await TheGPT.SummarizeDoc(doc.Value, true);
-            resultTexts += $"{counter}) {summarization}\n";
-            resultUrls += $"{doc.Url}\n";
+            urls.Add(doc.Url);
+            texts.Add(doc.Value);
+        }
+        texts = telegramBotDebug ? texts : await TheGPT.SummarizeDocs(texts);
+        var sumedDocs = texts.Zip(urls);
+        foreach (var doc in sumedDocs) 
+        {
+            resultTexts += $"{counter}) {doc.First}\n";
+            resultUrls += $"{doc.Second}\n";
             counter++;
         }
         return (resultTexts, resultUrls);
@@ -107,7 +151,7 @@ class Program
                             string formatedMessage = await BroadenQuery(message.Text);
                             Console.WriteLine($"Broadened & paraphrased query: {formatedMessage}");
 
-                            List<HttpRetriever.Document> docs = await GetDocumentsFromServer(formatedMessage);
+                            List<HttpRetriever.RetrieverDocument> docs = await GetDocumentsFromServer(formatedMessage);
                             Console.WriteLine("Original docs:");
                             foreach(HttpRetriever.Document doc in docs)
                             {
@@ -140,16 +184,16 @@ class Program
     {
         return string.Concat(Enumerable.Repeat("Lorem ipsum dolor sit amet, consectetur adipiscing elit.", times));
     }
-    private static async Task<List<HttpRetriever.Document>> GetDocumentsFromServer(string query)
+    private static async Task<List<HttpRetriever.RetrieverDocument>> GetDocumentsFromServer(string query)
     {
         if (!telegramBotDebug)
         {
             return await HttpRetriever.PostQuery(query);
         }
-        List<HttpRetriever.Document> docs = new();
+        List<HttpRetriever.RetrieverDocument> docs = new();
         for (int i = 0; i < 6; i++)
         {
-            docs.Add(new HttpRetriever.Document(LoremIpsum(1), "https://youtu.be/dQw4w9WgXcQ"));
+            docs.Add(new HttpRetriever.RetrieverDocument(LoremIpsum(1), "https://youtu.be/dQw4w9WgXcQ"));
         }
         return docs;
     }
