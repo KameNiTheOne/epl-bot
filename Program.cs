@@ -26,8 +26,8 @@ class Program
     static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
     public static string pathToConfig = @"C:\Users\alext\OneDrive\Документы\codeshinenegans\TelegramBotik\TelegramBotik\config.json"; // Измени на свой путь к конфиг файлу
     public static uint contextSize = 8192; // Кол-во токенов, которые может обработать GPT, можно попробовать увеличить, если модель ничего не генерирует
-    public static int layersToGPU = 18; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай.
-    static bool isGPTSummarizer = true; // Режим телеграмм-бот(false) или GPT для суммаризации документов(true)
+    public static int layersToGPU = 8; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай.
+    static bool isGPTSummarizer = false; // Режим телеграмм-бот(false) или GPT для суммаризации документов(true)
     static string GPTSummarizerID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
     public static bool useSummarizerCluster = false;
 
@@ -211,11 +211,14 @@ class Program
         {
             await TheGPT.GetResponse(user, user_input, docs);
         }
-        await Validator(LoremIpsum(10));
+        else
+        {
+            await Validator(LoremIpsum(10));
+        }
     }
     private static async Task RealTimeReponse(string sent_response)
     {
-        sent_response = TheGPT.CleanGPTResponse(sent_response);
+        sent_response = TheGPT.CleanGPTResponse(sent_response, false);
         Console.WriteLine(sent_response);
         gpt_response += sent_response;
         bool flag = true;

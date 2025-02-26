@@ -8,12 +8,11 @@ namespace TelegramBotik
 {
     public static class TheGPT
     {
-        static string modelPath = @"C:\Users\alext\Downloads\Qwen2.5-7B.Q5_K_M.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
-        static LLamaWeights? model;
-        static LLamaContext? context;
-        static InteractiveExecutor? executor;
+        static string modelPath = @"C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
         static InferenceParams? inferenceParams;
         static string patternToTrim = @"(\bUser\W)|(\bAssistant\W)|(\bSystem\W)";
+        static SessionState resetState;
+        static ChatSession mainsession;
         public static void Initialize(uint _ContextSize, int _GpuLayerCount)
         {
             ModelParams parameters = new ModelParams(modelPath)
@@ -22,10 +21,15 @@ namespace TelegramBotik
                 GpuLayerCount = _GpuLayerCount // How many layers to offload to GPU. Please adjust it according to your GPU memory.
             };
 
-            model = LLamaWeights.LoadFromFile(parameters);
-            context = model.CreateContext(parameters);
+            LLamaWeights model = LLamaWeights.LoadFromFile(parameters);
+            LLamaContext context = model.CreateContext(parameters);
 
-            executor = new InteractiveExecutor(context);
+            InteractiveExecutor executor = new InteractiveExecutor(context);
+
+            ChatHistory new_history = new();
+            resetState = new ChatSession(executor, new_history).GetSessionState();
+
+            mainsession = new(executor, new_history);
 
             inferenceParams = new InferenceParams()
             { // No more than 256 tokens should appear in answer. Remove it if antiprompt is enough for control.
@@ -42,18 +46,22 @@ namespace TelegramBotik
             }
             Console.WriteLine("\t***End of History***");
         }
-        public static string CleanGPTResponse(string response)
+        public static string CleanGPTResponse(string response, bool trimWhiteSpace = true)
         {
-            return Regex.Replace(response, patternToTrim, string.Empty).TrimStart().TrimEnd();
+            string regexedResponse = Regex.Replace(response, patternToTrim, string.Empty);
+            if (trimWhiteSpace)
+            {
+                regexedResponse = regexedResponse.TrimStart().TrimEnd();
+            }
+            return regexedResponse;
         }
         private static async Task<string> GPTTask(string system, string assistant, string user, bool showHistory)
         {
             string result = "";
-            ChatHistory new_history = new();
-            SessionState resetSession = new ChatSession(executor, new_history).GetSessionState();
-            new_history.AddMessage(AuthorRole.System, system);
-            new_history.AddMessage(AuthorRole.Assistant, assistant);
-            ChatSession mainsession = new(executor, new_history);
+            mainsession.LoadSession(resetState);
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.System, system));
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.User, ""));
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.Assistant, assistant));
             await foreach (var text in mainsession.ChatAsync(new ChatHistory.Message(AuthorRole.User, user), inferenceParams))
             {
                 Console.WriteLine(text);
@@ -63,7 +71,6 @@ namespace TelegramBotik
             {
                 ShowHistory(mainsession.History);
             }
-            mainsession.LoadSession(resetSession);
             return CleanGPTResponse(result);
         }
         public static async Task<List<string>> AsyncSummarizeDocs(List<string> docs)
@@ -108,7 +115,7 @@ namespace TelegramBotik
             List<string> result = new();
             foreach (var doc in docs)
             {
-                result.Add(await SummarizeDoc(doc));
+                result.Add(await SummarizeDoc(doc, true));
             }
             return result;
         }
@@ -134,21 +141,19 @@ namespace TelegramBotik
         public static async Task GetResponse(string user, string user_input, string docs)
         {
             Console.WriteLine("Trying to send a message");
-            ChatHistory new_history = new();
-            SessionState resetSession = new ChatSession(executor, new_history).GetSessionState();
+            mainsession.LoadSession(resetState);
 
             Console.WriteLine(user_input);
             Console.WriteLine(docs);
-            new_history.AddMessage(AuthorRole.System, Configuration.Prompts["mainresponse"].System);
-            new_history.AddMessage(AuthorRole.Assistant, $"{Configuration.Prompts["mainresponse"].Assistant}{user_input}");
-            ChatSession mainsession = new(executor, new_history);
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.System, Configuration.Prompts["mainresponse"].System));
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.User, ""));
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.Assistant, $"{Configuration.Prompts["mainresponse"].Assistant}{user_input}"));
 
             await foreach (var text in mainsession.ChatAsync(new ChatHistory.Message(AuthorRole.User, $"{Configuration.Prompts["mainresponse"].User}{docs}"), inferenceParams))
             {
                 await Program.Validator(text);
             }
             ShowHistory(mainsession.History);
-            mainsession.LoadSession(resetSession);
         }
     }
 }
