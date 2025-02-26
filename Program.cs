@@ -111,7 +111,7 @@ class Program
         var sumedDocs = texts.Zip(urls);
         foreach (var doc in sumedDocs) 
         {
-            resultTexts += $"{counter}) {doc.First}\n";
+            resultTexts += $"Документ {counter}) {doc.First}\n";
             resultUrls += $"{doc.Second}\n";
             counter++;
         }

@@ -147,10 +147,11 @@ namespace TelegramBotik
             Console.WriteLine(docs);
             mainsession.AddMessage(new ChatHistory.Message(AuthorRole.System, Configuration.Prompts["mainresponse"].System));
             mainsession.AddMessage(new ChatHistory.Message(AuthorRole.User, ""));
-            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.Assistant, $"{Configuration.Prompts["mainresponse"].Assistant}{user_input}"));
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.Assistant, $"{Configuration.Prompts["mainresponse"].Assistant}{docs}"));
 
-            await foreach (var text in mainsession.ChatAsync(new ChatHistory.Message(AuthorRole.User, $"{Configuration.Prompts["mainresponse"].User}{docs}"), inferenceParams))
+            await foreach (var text in mainsession.ChatAsync(new ChatHistory.Message(AuthorRole.User, $"{Configuration.Prompts["mainresponse"].User}{user_input}"), inferenceParams))
             {
+                Console.WriteLine(text);
                 await Program.Validator(text);
             }
             ShowHistory(mainsession.History);
