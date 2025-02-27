@@ -32,7 +32,7 @@ namespace TelegramBotik
             {
                 HttpRetriever.Document doc = await request.ReadFromJsonAsync<HttpRetriever.Document>();
 
-                return await TheGPT.SummarizeDoc(doc.Value);
+                return await TheGPT.GPTTaskGetter(TheGPT.TaskType.Summarize, doc.Value);
             });
             Console.WriteLine($"Сервер для суммаризации запущен! ip сервера:{localip}");
             app.Run();

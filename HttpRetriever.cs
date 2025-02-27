@@ -58,11 +58,9 @@ namespace TelegramBotik.instruments
             public string? Value { get; set; }
         }
         private static HttpClient? client;
-        private static string? http;
-        public static void Initialize(string _http)
+        public static void Initialize()
         {
             client = new HttpClient();
-            http = _http;
         }
         public static async Task<string> Post<T>(string _http, string _case, T obj)
         {
@@ -72,7 +70,21 @@ namespace TelegramBotik.instruments
         }
         public static async Task<List<RetrieverDocument>> PostQuery(string text)
         {
-            string response = await Post(http, @"/query", new Text { Value = text });
+            string response;
+            while (true)
+            {
+                Configuration.Load();
+                try
+                {
+                    response = await Post($"http://{Configuration.HostIP}:8000", @"/query", new Text { Value = text });
+                }
+                catch
+                {
+                    Console.WriteLine($"Couldn't connect to retriever's server, ip: {Configuration.HostIP}! Please change hostip in config.json to current server ip.");
+                    continue;
+                }
+                break;
+            }
             Documents convert = JsonConvert.DeserializeObject<Documents>(response);
             return convert.GetDocuments();
         }

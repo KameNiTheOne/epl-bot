@@ -35,14 +35,14 @@ class Program
     {
         if (isGPTSummarizer)
         {
-            Configuration.Initialize();
+            Configuration.Load();
             if(Configuration.GPTHosts.TryGetValue(GPTSummarizerID, out string ip))
             {
                 Console.WriteLine("ID is in Hosts!");
                 if(ip != GPTServer.GetLocalIPAddress())
                 {
                     Configuration.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
-                    Configuration.SaveConfigfile();
+                    Configuration.Save();
                     Console.WriteLine("LocalIP of GPT server doesn't match one on Github! IP has been saved to file, please push to github!");
                 }
                 else
@@ -54,7 +54,7 @@ class Program
             {
                 Console.WriteLine("New GPTHost!");
                 Configuration.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
-                Configuration.SaveConfigfile();
+                Configuration.Save();
             }
             TheGPT.Initialize(contextSize, layersToGPU);
             GPTServer.Initialize();
@@ -85,9 +85,9 @@ class Program
 
             if (!telegramBotDebug)
             {
-                Configuration.Initialize();
+                Configuration.Load();
                 TheGPT.Initialize(contextSize, layersToGPU);
-                HttpRetriever.Initialize($"http://{Configuration.HostIP}:8000");
+                HttpRetriever.Initialize();
             }
 
             Console.WriteLine($"{me.FirstName} запущен!");
@@ -201,7 +201,7 @@ class Program
     {
         if (!telegramBotDebug)
         {
-            return await TheGPT.BroadenQuery(query);
+            return await TheGPT.GPTTaskGetter(TheGPT.TaskType.Broaden, query, true);
         }
         return LoremIpsum(1);
     }

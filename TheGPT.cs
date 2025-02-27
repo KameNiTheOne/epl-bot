@@ -13,6 +13,22 @@ namespace TelegramBotik
         static string patternToTrim = @"(\bUser\W)|(\bAssistant\W)|(\bSystem\W)";
         static SessionState resetState;
         static ChatSession mainsession;
+        public class TaskType // Enumerator type class
+        {
+            private TaskType((string, string) value) { Value = value; }
+            public (string, string) Value { get; private set; }
+            public (string, string) GetValue()
+            {
+                return Value;
+            }
+
+            public static TaskType Summarize { get { return new TaskType(("summarization", "Summarizing document...")); } }
+            public static TaskType Broaden { get { return new TaskType(("broadening", "Broadening query...")); } }
+        }
+        static void onGPTTask()
+        {
+            Configuration.Load();
+        }
         public static void Initialize(uint _ContextSize, int _GpuLayerCount)
         {
             ModelParams parameters = new ModelParams(modelPath)
@@ -76,7 +92,7 @@ namespace TelegramBotik
         public static async Task<List<string>> AsyncSummarizeDocs(List<string> docs)
         {
             Dictionary<Task<string>, string> tasks = new();
-            tasks[SummarizeDoc(docs.First())] = "0";
+            tasks[GPTTaskGetter(TaskType.Summarize, docs.First())] = "0";
             docs.RemoveAt(0);
             List<(string, string)> order = new() { ("0", "None") };
 
@@ -115,31 +131,29 @@ namespace TelegramBotik
             List<string> result = new();
             foreach (var doc in docs)
             {
-                result.Add(await SummarizeDoc(doc, true));
+                result.Add(await GPTTaskGetter(TaskType.Summarize ,doc, true));
             }
             return result;
         }
-        public static async Task<string> SummarizeDoc(string doc, bool showHistory = false)
+        /// <summary>
+        /// Function for accessing additional functionality of TheGPT, use TheGPT.TaskType to access said functionality
+        /// </summary>
+        public static async Task<string> GPTTaskGetter(TaskType type, string doc, bool showHistory = false)
         {
-            Console.WriteLine("Summarizing doc...");
+            onGPTTask();
+
+            (string promptType, string message) = type.GetValue();
+            Console.WriteLine(message);
             return await GPTTask(
-                Configuration.Prompts["summarization"].System,
-                $"{Configuration.Prompts["summarization"].Assistant}{doc}",
-                Configuration.Prompts["summarization"].User, 
-                showHistory
-                );
-        }
-        public static async Task<string> BroadenQuery(string query, bool showHistory = true)
-        {
-            return await GPTTask(
-                Configuration.Prompts["broadening"].System,
-                $"{Configuration.Prompts["broadening"].Assistant}{query}",
-                Configuration.Prompts["broadening"].User,
+                Configuration.Prompts[promptType].System,
+                $"{Configuration.Prompts[promptType].Assistant}{doc}",
+                Configuration.Prompts[promptType].User,
                 showHistory
                 );
         }
         public static async Task GetResponse(string user, string user_input, string docs)
         {
+            onGPTTask();
             Console.WriteLine("Trying to send a message");
             mainsession.LoadSession(resetState);
 

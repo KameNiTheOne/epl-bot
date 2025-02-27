@@ -21,7 +21,7 @@ namespace TelegramBotik.instruments
         public static Dictionary<string, GPTPrompts> Prompts;
         public static string HostIP;
         public static Dictionary<string, string> GPTHosts;
-        public static void Initialize()
+        public static void Load()
         {
             if (File.Exists(Program.pathToConfig))
             {
@@ -41,7 +41,7 @@ namespace TelegramBotik.instruments
                 throw new Exception("Pull config from github first!");
             }
         }
-        public static void SaveConfigfile()
+        public static void Save()
         {
             using (var stream = File.Open(Program.pathToConfig, FileMode.Truncate))
             {
