@@ -62,7 +62,10 @@ namespace TelegramBotik
             }
             Console.WriteLine("\t***End of History***");
         }
-        public static string CleanGPTResponse(string response, bool trimWhiteSpace = true)
+        /// <summary>
+        /// Removes unnecessary patterns specified in patternToTrim and whitespace characters from start and end of string (if trimWhiteSpace is true).
+        /// </summary>
+        public static string CleanResponse(string response, bool trimWhiteSpace = true)
         {
             string regexedResponse = Regex.Replace(response, patternToTrim, string.Empty);
             if (trimWhiteSpace)
@@ -87,7 +90,7 @@ namespace TelegramBotik
             {
                 ShowHistory(mainsession.History);
             }
-            return CleanGPTResponse(result);
+            return CleanResponse(result);
         }
         public static async Task<List<string>> AsyncSummarizeDocs(List<string> docs)
         {
@@ -151,7 +154,7 @@ namespace TelegramBotik
                 showHistory
                 );
         }
-        public static async Task GetResponse(string user, string user_input, string docs)
+        public static async Task GetResponse(string user_input, string docs)
         {
             onGPTTask();
             Console.WriteLine("Trying to send a message");
@@ -166,7 +169,7 @@ namespace TelegramBotik
             await foreach (var text in mainsession.ChatAsync(new ChatHistory.Message(AuthorRole.User, $"{Configuration.Prompts["mainresponse"].User}{user_input}"), inferenceParams))
             {
                 Console.WriteLine(text);
-                await Program.Validator(text);
+                await Program.UIValidator(text);
             }
             ShowHistory(mainsession.History);
         }

@@ -95,6 +95,78 @@ class Program
             await Task.Delay(-1); // Устанавливаем бесконечную задержку, чтобы наш бот работал постоянно
         }
     }
+    private static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+    {
+        // Обязательно ставим блок try-catch, чтобы наш бот не "падал" в случае каких-либо ошибок
+        try
+        {
+            // Сразу же ставим конструкцию switch, чтобы обрабатывать приходящие Update
+            switch (update.Type)
+            {
+                case UpdateType.Message:
+                    {
+                        Message message = update.Message;
+                        message.Text = message.Text is null ? "a" : message.Text;
+                        if (message.Text.StartsWith("@SatoshisBat_bot"))
+                        {
+                            Console.WriteLine($"Started processing {message.Id}"); // Start of preparations for processing
+                            message.Text = message.Text.Remove(0, 16);
+                            message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
+
+                            chatId = message.Chat.Id;
+                            gpt_response = "";
+                            batch = "";
+
+                            Message msg_to_edit = await botClient.SendMessage(
+                                chatId,
+                                ".",
+                                replyParameters: message.Id
+                            );
+                            messageId = msg_to_edit.MessageId; // End of preparations
+
+                            // Cancellation token source for cancellation. Make sure to dispose after use (which is done here through the using expression).
+                            using var tokenSource = new CancellationTokenSource();
+
+                            // The cancellation token will be used to communicate cancellation to tasks
+                            var token = tokenSource.Token;
+                            UIAnimateWait(token, ["..", "...", "....", ".....", "....", "...", "..", "."], 400);
+
+                            Console.WriteLine($"Starting retrieval and augmentation.\nOriginal query: {message.Text}");
+                            string formatedMessage = await BroadenQuery(message.Text);
+                            Console.WriteLine($"Broadened & paraphrased query: {formatedMessage}");
+
+                            List<HttpRetriever.RetrieverDocument> docs = await GetDocumentsFromServer(formatedMessage);
+                            Console.WriteLine("Original docs:");
+                            foreach (HttpRetriever.Document doc in docs)
+                            {
+                                Console.WriteLine(doc.Value);
+                            }
+                            (string Texts, string Urls) = await getFormatedTextsAndUrlsFromDocs(docs);
+                            Console.WriteLine("Finished retrieval and augmentation");
+
+                            tokenSource.Cancel(); // Stop animation
+
+                            await GPTResponse(message.Text, Texts);
+                            await UIRealTimeReponse(batch);
+
+                            Console.WriteLine("Finished generating response");
+
+                            Message docmsg = await botClient.SendMessage(
+                                chatId,
+                                $"{Texts}{Urls}",
+                                replyParameters: messageId
+                            );
+                            Console.WriteLine($"Finished processing {message.Id}");
+                        }
+                        return;
+                    }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.ToString());
+        }
+    }
     private static async Task<(string, string)> getFormatedTextsAndUrlsFromDocs(List<HttpRetriever.RetrieverDocument> docs)
     {
         string resultTexts = "";
@@ -117,74 +189,11 @@ class Program
         }
         return (resultTexts, resultUrls);
     }
-    private static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
-    {
-        // Обязательно ставим блок try-catch, чтобы наш бот не "падал" в случае каких-либо ошибок
-        try
-        {
-            // Сразу же ставим конструкцию switch, чтобы обрабатывать приходящие Update
-            switch (update.Type)
-            {
-                case UpdateType.Message:
-                    {
-                        Message message = update.Message;
-                        message.Text = message.Text is null ? "a" : message.Text;
-                        if (message.Text.StartsWith("@SatoshisBat_bot"))
-                        {
-                            Console.WriteLine($"Started processing {message.Id}");
-                            message.Text = message.Text.Remove(0, 16);
-                            User sent_from = message.From;
-                            chatId = message.Chat.Id;
-                            gpt_response = "";
-                            batch = "";
-
-                            string firstName = sent_from.FirstName is null ? "" : sent_from.FirstName;
-                            string lastName = sent_from.LastName is null ? "" : $" {sent_from.LastName}";
-                            Message msg_to_edit = await botClient.SendMessage(
-                                chatId,
-                                "_",
-                                replyParameters: message.Id
-                            );
-                            messageId = msg_to_edit.MessageId;
-
-                            Console.WriteLine($"Original query: {message.Text}");
-                            string formatedMessage = await BroadenQuery(message.Text);
-                            Console.WriteLine($"Broadened & paraphrased query: {formatedMessage}");
-
-                            List<HttpRetriever.RetrieverDocument> docs = await GetDocumentsFromServer(formatedMessage);
-                            Console.WriteLine("Original docs:");
-                            foreach(HttpRetriever.Document doc in docs)
-                            {
-                                Console.WriteLine(doc.Value);
-                            }
-                            (string Texts, string Urls) = await getFormatedTextsAndUrlsFromDocs(docs);
-
-                            await GPTResponse($"{firstName}{lastName}", message.Text, Texts);
-                            await RealTimeReponse(batch);
-
-                            Console.WriteLine("Finished generating");
-
-                            Message docmsg = await botClient.SendMessage(
-                                chatId,
-                                $"{Texts}{Urls}",
-                                replyParameters: messageId
-                            );
-                            Console.WriteLine($"Finished processing {message.Id}");
-                        }
-                        return;
-                    }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex.ToString());
-        }
-    }
-    private static string LoremIpsum(int times)
+    static string LoremIpsum(int times)
     {
         return string.Concat(Enumerable.Repeat("Lorem ipsum dolor sit amet, consectetur adipiscing elit.", times));
     }
-    private static async Task<List<HttpRetriever.RetrieverDocument>> GetDocumentsFromServer(string query)
+    static async Task<List<HttpRetriever.RetrieverDocument>> GetDocumentsFromServer(string query)
     {
         if (!telegramBotDebug)
         {
@@ -197,7 +206,7 @@ class Program
         }
         return docs;
     }
-    private static async Task<string> BroadenQuery(string query)
+    static async Task<string> BroadenQuery(string query)
     {
         if (!telegramBotDebug)
         {
@@ -205,44 +214,43 @@ class Program
         }
         return LoremIpsum(1);
     }
-    private static async Task GPTResponse(string user, string user_input, string docs)
+    static async Task GPTResponse(string user_input, string docs)
     {
         if (!telegramBotDebug)
         {
-            await TheGPT.GetResponse(user, user_input, docs);
+            await TheGPT.GetResponse(user_input, docs);
         }
         else
         {
-            await Validator(LoremIpsum(10));
+            await UIValidator(LoremIpsum(10));
         }
     }
-    private static async Task RealTimeReponse(string sent_response)
+    static async Task UIAnimateWait(CancellationToken ct, string[] animation, int animationSpeed)
     {
-        sent_response = TheGPT.CleanGPTResponse(sent_response, false);
-        Console.WriteLine(sent_response);
-        gpt_response += sent_response;
-        bool flag = true;
-        try
+        while (true)
         {
-            await _botClient.EditMessageText(chatId, messageId, gpt_response);
-        }
-        catch (Exception) 
-        {
-            Console.WriteLine("Failed to edit message in one attempt! Batch won't be cleared.");
-            flag = false;
-        }
-        if (flag)
-        {
-            batch = "";
+            foreach (string frame in animation)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    ct.ThrowIfCancellationRequested();
+                }
+                try
+                {
+                    await _botClient.EditMessageText(chatId, messageId, frame);
+                }
+                catch (Exception) { Console.WriteLine("Failed to show a frame!"); }
+                await Task.Delay(animationSpeed);
+            }
         }
     }
-    private static int wordCount(string text)
+    static int wordCount(string text)
     {
         var regex = new Regex(string.Format(@"\b?\b"),
                           RegexOptions.IgnoreCase);
         return regex.Matches(text).Count;
     }
-    public static async Task Validator(string sent_response)
+    public static async Task UIValidator(string sent_response)
     {
         batch += sent_response;
         if (wordCount(batch) > batch_size)
@@ -258,10 +266,30 @@ class Program
                 messageId = msg_to_edit.MessageId;
                 gpt_response = batch;
             }
-            await RealTimeReponse(batch);
+            await UIRealTimeReponse(batch);
         }
     }
-    private static Task ErrorHandler(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
+    static async Task UIRealTimeReponse(string sent_response)
+    {
+        sent_response = TheGPT.CleanResponse(sent_response, false);
+        Console.WriteLine(sent_response);
+        gpt_response += sent_response;
+        bool flag = true;
+        try
+        {
+            await _botClient.EditMessageText(chatId, messageId, gpt_response);
+        }
+        catch (Exception)
+        {
+            Console.WriteLine("Failed to edit message in one attempt! Batch won't be cleared.");
+            flag = false;
+        }
+        if (flag)
+        {
+            batch = "";
+        }
+    }
+    static Task ErrorHandler(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
     {
         // Тут создадим переменную, в которую поместим код ошибки и её сообщение 
         var ErrorMessage = error switch
