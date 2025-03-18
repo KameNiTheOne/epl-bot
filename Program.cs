@@ -24,7 +24,6 @@ class Program
 
     //Переменные для настройки бота и GPT
     static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
-    public static string pathToConfig = @"C:\Users\alext\OneDrive\Документы\codeshinenegans\TelegramBotik\TelegramBotik\config.json"; // Измени на свой путь к конфиг файлу
     public static uint contextSize = 8192; // Кол-во токенов, которые может обработать GPT, можно попробовать увеличить, если модель ничего не генерирует
     public static int layersToGPU = 8; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай.
     static bool isGPTSummarizer = false; // Режим телеграмм-бот(false) или GPT для суммаризации документов(true)
@@ -33,29 +32,13 @@ class Program
 
     static async Task Main()
     {
+        await Configuration.Load();
+
+        Console.CancelKeyPress += new ConsoleCancelEventHandler(OnExit);
+
         if (isGPTSummarizer)
         {
-            Configuration.Load();
-            if(Configuration.GPTHosts.TryGetValue(GPTSummarizerID, out string ip))
-            {
-                Console.WriteLine("ID is in Hosts!");
-                if(ip != GPTServer.GetLocalIPAddress())
-                {
-                    Configuration.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
-                    Configuration.Save();
-                    Console.WriteLine("LocalIP of GPT server doesn't match one on Github! IP has been saved to file, please push to github!");
-                }
-                else
-                {
-                    Console.WriteLine("LocalIP of host matches saved IP.");
-                }
-            }
-            else
-            {
-                Console.WriteLine("New GPTHost!");
-                Configuration.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
-                Configuration.Save();
-            }
+            Configuration.MainConfig.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
             TheGPT.Initialize(contextSize, layersToGPU);
             GPTServer.Initialize();
         }
@@ -63,10 +46,10 @@ class Program
         {
             NativeLibraryConfig.All.WithLogCallback(delegate (LLamaLogLevel level, string message) { Console.Write($"{level}: {message}"); });
 
-            _botClient = new TelegramBotClient("7316728850:AAHE1Kp7iknvSCa-cks6lzlo5cabB_5K6Ao"); // Присваиваем нашей переменной значение, в параметре передаем Token, полученный от BotFather
-            _receiverOptions = new ReceiverOptions // Также присваем значение настройкам бота
+            _botClient = new TelegramBotClient(Configuration.MainConfig.BotTokens["main"]);
+            _receiverOptions = new ReceiverOptions
             {
-                AllowedUpdates = new[] // Тут указываем типы получаемых Update`ов, о них подробнее расказано тут https://core.telegram.org/bots/api#update
+                AllowedUpdates = new[]
                 {
                 UpdateType.Message, // Сообщения (текст, фото/видео, голосовые/видео сообщения и т.д.)
             },
@@ -81,26 +64,29 @@ class Program
             // ErrorHandler - обработчик ошибок, связанных с Bot API
             _botClient.StartReceiving(UpdateHandler, ErrorHandler, _receiverOptions, cts.Token); // Запускаем бота
 
-            var me = await _botClient.GetMe(); // Создаем переменную, в которую помещаем информацию о нашем боте.
+            var me = await _botClient.GetMe();
 
             if (!telegramBotDebug)
             {
-                Configuration.Load();
                 TheGPT.Initialize(contextSize, layersToGPU);
                 HttpRetriever.Initialize();
             }
 
-            Console.WriteLine($"{me.FirstName} запущен!");
+            Console.WriteLine($"{me.FirstName} запущен! Чтобы выйти из программы, нажми CTRL+C.");
 
-            await Task.Delay(-1); // Устанавливаем бесконечную задержку, чтобы наш бот работал постоянно
+            await Task.Delay(-1); // Устанавливаем бесконечную задержку
         }
     }
-    private static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+    static void OnExit(object sender, EventArgs e)
     {
-        // Обязательно ставим блок try-catch, чтобы наш бот не "падал" в случае каких-либо ошибок
+        Configuration.IsCurrentConfigDifferent();
+        Console.WriteLine("Exiting application...");
+    }
+    static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+    {
         try
         {
-            // Сразу же ставим конструкцию switch, чтобы обрабатывать приходящие Update
+            // Обрабатываем приходящие Update
             switch (update.Type)
             {
                 case UpdateType.Message:
@@ -141,7 +127,7 @@ class Program
                             {
                                 Console.WriteLine(doc.Value);
                             }
-                            (string Texts, string Urls) = await getFormatedTextsAndUrlsFromDocs(docs);
+                            (string Texts, string Urls) = await getAndFormatTextsAndUrlsFromDocs(docs);
                             Console.WriteLine("Finished retrieval and augmentation");
 
                             tokenSource.Cancel(); // Stop animation
@@ -167,10 +153,14 @@ class Program
             Console.WriteLine(ex.ToString());
         }
     }
-    private static async Task<(string, string)> getFormatedTextsAndUrlsFromDocs(List<HttpRetriever.RetrieverDocument> docs)
+    static string LoremIpsum(int times) // Returns LoremIpsum repeated <times> amount
+    {
+        return string.Concat(Enumerable.Repeat("Lorem ipsum dolor sit amet, consectetur adipiscing elit.", times));
+    }
+    static async Task<(string, string)> getAndFormatTextsAndUrlsFromDocs(List<HttpRetriever.RetrieverDocument> docs)
     {
         string resultTexts = "";
-        string resultUrls = "\n";
+        string resultUrls = "";
         int counter = 1;
         List<string> urls = new();
         List<string> texts = new();
@@ -188,10 +178,6 @@ class Program
             counter++;
         }
         return (resultTexts, resultUrls);
-    }
-    static string LoremIpsum(int times)
-    {
-        return string.Concat(Enumerable.Repeat("Lorem ipsum dolor sit amet, consectetur adipiscing elit.", times));
     }
     static async Task<List<HttpRetriever.RetrieverDocument>> GetDocumentsFromServer(string query)
     {
@@ -291,7 +277,6 @@ class Program
     }
     static Task ErrorHandler(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
     {
-        // Тут создадим переменную, в которую поместим код ошибки и её сообщение 
         var ErrorMessage = error switch
         {
             ApiRequestException apiRequestException

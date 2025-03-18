@@ -73,14 +73,14 @@ namespace TelegramBotik.instruments
             string response;
             while (true)
             {
-                Configuration.Load();
+                await Configuration.Load();
                 try
                 {
-                    response = await Post($"http://{Configuration.HostIP}:8000", @"/query", new Text { Value = text });
+                    response = await Post($"http://{Configuration.MainConfig.HostIP}:8000", @"/query", new Text { Value = text });
                 }
                 catch
                 {
-                    Console.WriteLine($"Couldn't connect to retriever's server, ip: {Configuration.HostIP}! Please change hostip in config.json to current server ip.");
+                    Console.WriteLine($"Couldn't connect to retriever's server, ip: {Configuration.MainConfig.HostIP}! Please change hostip in config.json to current server ip and pin new config in group chat.");
                     continue;
                 }
                 break;

@@ -16,54 +16,83 @@ namespace TelegramBotik.instruments
             return $"{User}, {Assistant}, {System}";
         }
     }
+    public class Config
+    {
+        [JsonProperty("prompts")]
+        public Dictionary<string, GPTPrompts> Prompts;
+        [JsonProperty("hostip")]
+        public string? HostIP;
+        [JsonProperty("gpthosts")]
+        public Dictionary<string, string> GPTHosts;
+        [JsonProperty("bottokens")]
+        public Dictionary<string, string> BotTokens;
+        [JsonProperty("configchatid")]
+        public string? ConfigChatID;
+        public bool Equals(Config other)
+        {
+            return Prompts.SequenceEqual(other.Prompts)&&HostIP==other.HostIP&&GPTHosts.SequenceEqual(other.GPTHosts);
+        }
+    }
     public static class Configuration
     {
-        public static Dictionary<string, GPTPrompts> Prompts;
-        public static string HostIP;
-        public static Dictionary<string, string> GPTHosts;
-        public static void Load()
+        static string pathToConfig;
+        public static Config MainConfig;
+        static Config downloadedConfig;
+        public static async Task Load()
         {
-            if (File.Exists(Program.pathToConfig))
+            SetPathToConfig();
+            if (MainConfig == null)
             {
-                using (var stream = File.Open(Program.pathToConfig, FileMode.Open))
+                try
                 {
-                    using (var reader = new StreamReader(stream, Encoding.UTF8))
+                    using (var stream = File.Open(pathToConfig, FileMode.Open))
                     {
-                        Config convert = JsonConvert.DeserializeObject<Config>(reader.ReadToEnd());
-                        Prompts = convert.Prompts;
-                        HostIP = convert.HostIP;
-                        GPTHosts = convert.GPTHosts;
+                        using (var reader = new StreamReader(stream, Encoding.UTF8))
+                        {
+                            MainConfig = JsonConvert.DeserializeObject<Config>(reader.ReadToEnd());
+                        }
                     }
                 }
+                catch (Exception)
+                {
+                    Console.WriteLine($"Config file not found at {pathToConfig}! Please download latest config from group chat.");
+                    Environment.Exit(2);
+                }
+                ConfigRetriever.Initialize();
             }
-            else
-            {
-                throw new Exception("Pull config from github first!");
-            }
+            downloadedConfig = await ConfigRetriever.DownloadConfig();
+            MainConfig = downloadedConfig;
         }
-        public static void Save()
+        static void SetPathToConfig()
         {
-            using (var stream = File.Open(Program.pathToConfig, FileMode.Truncate))
+            string baseFolder = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string folderPath = Path.Combine(baseFolder, @"BitaSatoshi(C#)\");
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+            pathToConfig = folderPath + "config.json";
+        }
+        static void SaveConfig()
+        {
+            using (var stream = File.Open(pathToConfig, FileMode.Create))
             {
                 using (var writer = new StreamWriter(stream, Encoding.UTF8))
                 {
-                    string convert = JsonConvert.SerializeObject(toConfigClass());
+                    string convert = JsonConvert.SerializeObject(MainConfig);
                     writer.WriteLine(convert);
                 }
             }
         }
-        static Config toConfigClass()
+        public static void IsCurrentConfigDifferent()
         {
-            return new Config() { HostIP = HostIP, GPTHosts = GPTHosts, Prompts = Prompts };
-        }
-        private class Config
-        {
-            [JsonProperty("prompts")]
-            public Dictionary<string, GPTPrompts> Prompts;
-            [JsonProperty("hostip")]
-            public string? HostIP;
-            [JsonProperty("gpthosts")]
-            public Dictionary<string, string> GPTHosts;
+            if (!MainConfig.Equals(downloadedConfig))
+            {
+                Console.WriteLine($"Current config does not match main config! Saving changes to {pathToConfig}. Consider pinning new config in group chat.");
+                SaveConfig();
+                return;
+            }
+            Console.WriteLine("Config of current application matches main config.");
         }
     }
 }

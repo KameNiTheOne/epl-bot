@@ -25,9 +25,9 @@ namespace TelegramBotik
             public static TaskType Summarize { get { return new TaskType(("summarization", "Summarizing document...")); } }
             public static TaskType Broaden { get { return new TaskType(("broadening", "Broadening query...")); } }
         }
-        static void onGPTTask()
+        static async Task onGPTTask()
         {
-            Configuration.Load();
+            await Configuration.Load();
         }
         public static void Initialize(uint _ContextSize, int _GpuLayerCount)
         {
@@ -99,9 +99,9 @@ namespace TelegramBotik
             docs.RemoveAt(0);
             List<(string, string)> order = new() { ("0", "None") };
 
-            foreach (string id in Configuration.GPTHosts.Keys)
+            foreach (string id in Configuration.MainConfig.GPTHosts.Keys)
             {
-                tasks[HttpRetriever.Post(@$"http://{Configuration.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
+                tasks[HttpRetriever.Post(@$"http://{Configuration.MainConfig.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
                 docs.RemoveAt(0);
                 order.Add((id, "None"));
             }
@@ -114,7 +114,7 @@ namespace TelegramBotik
                 order[index] = (order[index].Item1, await finishedTask);
 
                 tasks.Remove(finishedTask);
-                tasks[HttpRetriever.Post(@$"http://{Configuration.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
+                tasks[HttpRetriever.Post(@$"http://{Configuration.MainConfig.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
                 docs.RemoveAt(0);
                 order.Add((id, "None"));
             }
@@ -143,30 +143,30 @@ namespace TelegramBotik
         /// </summary>
         public static async Task<string> GPTTaskGetter(TaskType type, string doc, bool showHistory = false)
         {
-            onGPTTask();
+            await onGPTTask();
 
             (string promptType, string message) = type.GetValue();
             Console.WriteLine(message);
             return await GPTTask(
-                Configuration.Prompts[promptType].System,
-                $"{Configuration.Prompts[promptType].Assistant}{doc}",
-                Configuration.Prompts[promptType].User,
+                Configuration.MainConfig.Prompts[promptType].System,
+                $"{Configuration.MainConfig.Prompts[promptType].Assistant}{doc}",
+                Configuration.MainConfig.Prompts[promptType].User,
                 showHistory
                 );
         }
         public static async Task GetResponse(string user_input, string docs)
         {
-            onGPTTask();
+            await onGPTTask();
             Console.WriteLine("Trying to send a message");
             mainsession.LoadSession(resetState);
 
             Console.WriteLine(user_input);
             Console.WriteLine(docs);
-            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.System, Configuration.Prompts["mainresponse"].System));
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.System, Configuration.MainConfig.Prompts["mainresponse"].System));
             mainsession.AddMessage(new ChatHistory.Message(AuthorRole.User, ""));
-            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.Assistant, $"{Configuration.Prompts["mainresponse"].Assistant}{docs}"));
+            mainsession.AddMessage(new ChatHistory.Message(AuthorRole.Assistant, $"{Configuration.MainConfig.Prompts["mainresponse"].Assistant}{docs}"));
 
-            await foreach (var text in mainsession.ChatAsync(new ChatHistory.Message(AuthorRole.User, $"{Configuration.Prompts["mainresponse"].User}{user_input}"), inferenceParams))
+            await foreach (var text in mainsession.ChatAsync(new ChatHistory.Message(AuthorRole.User, $"{Configuration.MainConfig.Prompts["mainresponse"].User}{user_input}"), inferenceParams))
             {
                 Console.WriteLine(text);
                 await Program.UIValidator(text);
