@@ -34,7 +34,7 @@ namespace TelegramBotik
 
             var me = await _botClient.GetMe();
 
-            Console.WriteLine($"{me.FirstName} инициализирован.");
+            Console.WriteLine($"Инициализация телеграм-бота - получателя конфига завершена!");
 
             await Task.Delay(-1);
         }

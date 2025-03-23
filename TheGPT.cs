@@ -25,10 +25,6 @@ namespace TelegramBotik
             public static TaskType Summarize { get { return new TaskType(("summarization", "Summarizing document...")); } }
             public static TaskType Broaden { get { return new TaskType(("broadening", "Broadening query...")); } }
         }
-        static async Task onGPTTask()
-        {
-            await Configuration.Load();
-        }
         public static void Initialize(uint _ContextSize, int _GpuLayerCount)
         {
             ModelParams parameters = new ModelParams(modelPath)
@@ -52,6 +48,10 @@ namespace TelegramBotik
                 SamplingPipeline = new DefaultSamplingPipeline() { Temperature = 0.75f },
                 AntiPrompts = new List<string> {"User:", "System:", "User: ", "System: ", "\nUser:", "\nSystem:", "\nUser: ", "\nSystem: "} // Stop generation once antiprompts appear.
             };
+        }
+        static async Task onGPTTask()
+        {
+            await Configuration.Load();
         }
         private static void ShowHistory(ChatHistory history)
         {

@@ -23,7 +23,7 @@ class Program
     static int batch_size = 5;
 
     //Переменные для настройки бота и GPT
-    static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
+    static bool telegramBotDebug = true; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
     public static uint contextSize = 8192; // Кол-во токенов, которые может обработать GPT, можно попробовать увеличить, если модель ничего не генерирует
     public static int layersToGPU = 8; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай.
     static bool isGPTSummarizer = false; // Режим телеграмм-бот(false) или GPT для суммаризации документов(true)
@@ -35,6 +35,8 @@ class Program
         await Configuration.Load();
 
         Console.CancelKeyPress += new ConsoleCancelEventHandler(OnExit);
+
+        if (telegramBotDebug) Console.WriteLine("TelegramBot debug mode is on!");
 
         if (isGPTSummarizer)
         {
@@ -116,6 +118,7 @@ class Program
                             // The cancellation token will be used to communicate cancellation to tasks
                             var token = tokenSource.Token;
                             UIAnimateWait(token, ["..", "...", "....", ".....", "....", "...", "..", "."], 400);
+                            if (telegramBotDebug) await Task.Delay(10000);
 
                             Console.WriteLine($"Starting retrieval and augmentation.\nOriginal query: {message.Text}");
                             string formatedMessage = await BroadenQuery(message.Text);
