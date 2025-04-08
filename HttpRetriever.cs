@@ -57,13 +57,9 @@ namespace TelegramBotik.instruments
         {
             public string? Value { get; set; }
         }
-        private static HttpClient? client;
-        public static void Initialize()
+        static async Task<string> Post<T>(string _http, string _case, T obj)
         {
-            client = new HttpClient();
-        }
-        public static async Task<string> Post<T>(string _http, string _case, T obj)
-        {
+            HttpClient client = new();
             StringContent content = new StringContent(JsonConvert.SerializeObject(obj));
             using var response = await client.PostAsync($"{_http}{_case}", content);
             return await response.Content.ReadAsStringAsync();

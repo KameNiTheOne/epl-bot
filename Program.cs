@@ -3,220 +3,291 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
-using TelegramBotik;
 using TelegramBotik.instruments;
-using System.Text.RegularExpressions;
 using LLama.Native;
+using System.Text;
 
-class Program
+namespace TelegramBotik
 {
-    // Это клиент для работы с Telegram Bot API, который позволяет отправлять сообщения, управлять ботом, подписываться на обновления и многое другое.
-    static ITelegramBotClient _botClient;
-
-    // Это объект с настройками работы бота. Здесь мы будем указывать, какие типы Update мы будем получать, Timeout бота и так далее.
-    static ReceiverOptions _receiverOptions;
-    static ChatId chatId;
-    static int messageId;
-    static string gpt_response;
-    static string batch;
-    static int currentMessageSize = 0;
-    static int batch_size = 5;
-
-    //Переменные для настройки бота и GPT
-    static bool telegramBotDebug = true; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
-    public static uint contextSize = 8192; // Кол-во токенов, которые может обработать GPT, можно попробовать увеличить, если модель ничего не генерирует
-    public static int layersToGPU = 8; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай.
-    static bool isGPTSummarizer = false; // Режим телеграмм-бот(false) или GPT для суммаризации документов(true)
-    static string GPTSummarizerID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
-    public static bool useSummarizerCluster = false;
-
-    static async Task Main()
+    public class JSONMessage
     {
-        await Configuration.Load();
-
-        Console.CancelKeyPress += new ConsoleCancelEventHandler(OnExit);
-
-        if (telegramBotDebug) Console.WriteLine("TelegramBot debug mode is on!");
-
-        if (isGPTSummarizer)
+        public long Chatid { get; set; }
+        public int Id { get; set; }
+        public string Text { get; set; }
+        public static JSONMessage FromMeassage(Message msg)
         {
-            Configuration.MainConfig.GPTHosts[GPTSummarizerID] = GPTServer.GetLocalIPAddress();
-            TheGPT.Initialize(contextSize, layersToGPU);
-            GPTServer.Initialize();
+            return new JSONMessage { Chatid = msg.Chat.Id, Id = msg.Id, Text = msg.Text };
         }
-        else
+    }
+    public class LocalIP
+    {
+        public string IP { get; set; }
+    }
+    class Program
+    {
+        // Это клиент для работы с Telegram Bot API, который позволяет отправлять сообщения, управлять ботом, подписываться на обновления и многое другое.
+        static ITelegramBotClient _botClient;
+
+        static ChatId chatId;
+        static int messageId;
+        static string gpt_response;
+        static string batch;
+        static PriorityIp prioritizedIp;
+        static CancellationTokenSource cts;
+
+        //Булевые переменные для конфигурации главного сервера
+        public static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
+        static bool useSummarizer = false; // Сокращать документы или нет
+        public static bool useSummarizerCluster = false; // Использовать кластер для сокращения или нет
+        public static bool useLocalConfig = false; // Не загружать конфиг с теоеграма, а использовать локальный
+
+        //Булевые переменные для выбора режимов сервера, True на какой-либо из превращает данную сессию в ячейку кластера
+        static bool isGPTSummarizer = false; // Режим кластерного сокращения документов
+
+        //Переменные для настройки бота и GPT
+        public static uint contextSize = 16000; // Кол-во токенов, которые может обработать GPT
+        public static int layersToGPU = 16; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай
+        static string GPTHostID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
+        static int batch_size = 17;
+
+        static async Task Main()
         {
-            NativeLibraryConfig.All.WithLogCallback(delegate (LLamaLogLevel level, string message) { Console.Write($"{level}: {message}"); });
+            cts = new CancellationTokenSource();
 
-            _botClient = new TelegramBotClient(Configuration.MainConfig.BotTokens["main"]);
-            _receiverOptions = new ReceiverOptions
+            Instruments.httpClient = new HttpClient() { Timeout = TimeSpan.FromSeconds(600) };
+
+            await Configuration.Load();
+
+            Console.CancelKeyPress += new ConsoleCancelEventHandler(OnExit);
+
+            NativeLibraryConfig.All.WithLogCallback(delegate (LLamaLogLevel level, string message) { Console.Write($"{level}: {message}"); }); // Better GPT logs
+            TheGPT.Initialize(contextSize, layersToGPU);
+
+            if (!isGPTSummarizer)
             {
-                AllowedUpdates = new[]
+                _botClient = new TelegramBotClient(Configuration.MainConfig.BotTokens["main"]);
+                Priority priority;
+
+                if (!await MainServer.isAlreadyActive())
                 {
-                UpdateType.Message, // Сообщения (текст, фото/видео, голосовые/видео сообщения и т.д.)
-            },
-                // Параметр, отвечающий за обработку сообщений, пришедших за то время, когда ваш бот был оффлайн
-                // True - не обрабатывать, False (стоит по умолчанию) - обрабаывать
-                DropPendingUpdates = true,
-            };
+                    priority = Priority.High;
+                    MainServer.Initialize(cts.Token);
+                    Configuration.MainConfig.MainIP = Instruments.GetLocalIPAddress();
+                    Configuration.IsCurrentConfigDifferent();
+                    ReceiverOptions _receiverOptions = new ReceiverOptions
+                    {
+                        AllowedUpdates =
+                        [
+                            UpdateType.Message, // Сообщения (текст, фото/видео, голосовые/видео сообщения и т.д.)
+                        ],
+                        // Параметр, отвечающий за обработку сообщений, пришедших за то время, когда ваш бот был оффлайн
+                        // True - не обрабатывать, False (стоит по умолчанию) - обрабаывать
+                        DropPendingUpdates = true,
+                    };
 
-            using var cts = new CancellationTokenSource();
+                    using var _cts = new CancellationTokenSource();
+                    _botClient.StartReceiving(UpdateHandler, ErrorHandler, _receiverOptions, _cts.Token); // Бот начинает принимать запросы
+                }
+                else priority = Priority.Normal;
 
-            // UpdateHander - обработчик приходящих Update`ов
-            // ErrorHandler - обработчик ошибок, связанных с Bot API
-            _botClient.StartReceiving(UpdateHandler, ErrorHandler, _receiverOptions, cts.Token); // Запускаем бота
-
-            var me = await _botClient.GetMe();
-
-            if (!telegramBotDebug)
+                prioritizedIp = new PriorityIp { Ip = Instruments.GetLocalIPAddress(), Priority = priority };
+                await MainServer.Register(prioritizedIp);
+            }
+            else
             {
-                TheGPT.Initialize(contextSize, layersToGPU);
-                HttpRetriever.Initialize();
+                Configuration.MainConfig.GPTHosts[GPTHostID] = Instruments.GetLocalIPAddress();
+                Configuration.IsCurrentConfigDifferent();
             }
 
-            Console.WriteLine($"{me.FirstName} запущен! Чтобы выйти из программы, нажми CTRL+C.");
+            GPTServer.Initialize(isGPTSummarizer);
+
+            await Task.Delay(100);
+            Console.WriteLine($"\nБита Сатоши запущен! Чтобы выйти из программы, нажми CTRL+C.");
+
+            DisplayActiveModes();
 
             await Task.Delay(-1); // Устанавливаем бесконечную задержку
         }
-    }
-    static void OnExit(object sender, EventArgs e)
-    {
-        Configuration.IsCurrentConfigDifferent();
-        Console.WriteLine("Exiting application...");
-    }
-    static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
-    {
-        try
+        static void OnExit(object sender, EventArgs e)
         {
-            // Обрабатываем приходящие Update
-            switch (update.Type)
+            Configuration.IsCurrentConfigDifferent();
+            cts.Cancel();
+            cts.Dispose();
+            Console.WriteLine("Exiting application...");
+        }
+        /// <summary>
+        /// Displays active debug modes (bools) and such in console.
+        /// </summary>
+        static void DisplayActiveModes()
+        {
+            Console.WriteLine("\n*** Active server modes ***");
+            if (telegramBotDebug) Console.WriteLine("TelegramBot debug mode is on!");
+            if (useSummarizer) Console.WriteLine("Is using doc summarization");
+            if (useSummarizerCluster) Console.WriteLine("Is using cluster mode for summarization");
+            if (isGPTSummarizer) Console.WriteLine($"This instance is a summarizer in a cluster, id: {GPTHostID}");
+            Console.WriteLine("*** End of active modes ***\n");
+        }
+        static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+        {
+            try
             {
-                case UpdateType.Message:
-                    {
-                        Message message = update.Message;
-                        message.Text = message.Text is null ? "a" : message.Text;
-                        if (message.Text.StartsWith("@SatoshisBat_bot"))
+                // Обрабатываем приходящие боту Update
+                switch (update.Type)
+                {
+                    case UpdateType.Message:
                         {
-                            Console.WriteLine($"Started processing {message.Id}"); // Start of preparations for processing
-                            message.Text = message.Text.Remove(0, 16);
-                            message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
-
-                            chatId = message.Chat.Id;
-                            gpt_response = "";
-                            batch = "";
-
-                            Message msg_to_edit = await botClient.SendMessage(
-                                chatId,
-                                ".",
-                                replyParameters: message.Id
-                            );
-                            messageId = msg_to_edit.MessageId; // End of preparations
-
-                            // Cancellation token source for cancellation. Make sure to dispose after use (which is done here through the using expression).
-                            using var tokenSource = new CancellationTokenSource();
-
-                            // The cancellation token will be used to communicate cancellation to tasks
-                            var token = tokenSource.Token;
-                            UIAnimateWait(token, ["..", "...", "....", ".....", "....", "...", "..", "."], 400);
-                            if (telegramBotDebug) await Task.Delay(10000);
-
-                            Console.WriteLine($"Starting retrieval and augmentation.\nOriginal query: {message.Text}");
-                            string formatedMessage = await BroadenQuery(message.Text);
-                            Console.WriteLine($"Broadened & paraphrased query: {formatedMessage}");
-
-                            List<HttpRetriever.RetrieverDocument> docs = await GetDocumentsFromServer(formatedMessage);
-                            Console.WriteLine("Original docs:");
-                            foreach (HttpRetriever.Document doc in docs)
+                            Message message = update.Message;
+                            message.Text = message.Text is null ? "a" : message.Text;
+                            if (message.Text.StartsWith("@SatoshisBat_bot"))
                             {
-                                Console.WriteLine(doc.Value);
+                                message.Text = message.Text.Remove(0, 16);
+                                message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
+                                MainServer.DistributeMessage(JSONMessage.FromMeassage(message));
                             }
-                            (string Texts, string Urls) = await getAndFormatTextsAndUrlsFromDocs(docs);
-                            Console.WriteLine("Finished retrieval and augmentation");
+                            //Message message = update.Message;
+                            //message.Text = message.Text is null ? "a" : message.Text;
+                            //if (message.Text.StartsWith("@SatoshisBat_bot"))
+                            //{
+                            //    Console.WriteLine($"Started processing {message.Id}"); // Start of preparations for processing
+                            //    message.Text = message.Text.Remove(0, 16);
+                            //    message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
 
-                            tokenSource.Cancel(); // Stop animation
+                            //    chatId = message.Chat.Id;
+                            //    gpt_response = "";
+                            //    batch = "";
 
-                            await GPTResponse(message.Text, Texts);
-                            await UIRealTimeReponse(batch);
+                            //    Message msg_to_edit = await botClient.SendMessage(
+                            //        chatId,
+                            //        "_",
+                            //        replyParameters: message.Id
+                            //    );
+                            //    messageId = msg_to_edit.MessageId; // End of preparations
 
-                            Console.WriteLine("Finished generating response");
+                            //    // Cancellation token source for cancellation. Make sure to dispose after use (which is done here through the using expression).
+                            //    using var tokenSource = new CancellationTokenSource();
 
-                            Message docmsg = await botClient.SendMessage(
-                                chatId,
-                                $"{Texts}{Urls}",
-                                replyParameters: messageId
-                            );
-                            Console.WriteLine($"Finished processing {message.Id}");
+                            //    // The cancellation token will be used to communicate cancellation to tasks
+                            //    var token = tokenSource.Token;
+                            //    UIRandomPhrasesAnimation(token, ["...Обрабатываю документы..."], 500);
+                            //    if (telegramBotDebug) await Task.Delay(100000);
+
+                            //    Console.WriteLine($"Starting retrieval and augmentation.\nOriginal query: {message.Text}");
+                            //    string formatedMessage = await BroadenQuery(message.Text);
+                            //    Console.WriteLine($"Broadened & paraphrased query: {formatedMessage}");
+
+                            //    List<HttpRetriever.RetrieverDocument> docs = await GetDocumentsFromServer(formatedMessage);
+                            //    Console.WriteLine("Original docs:");
+                            //    foreach (HttpRetriever.Document doc in docs)
+                            //    {
+                            //        Console.WriteLine(doc.Value);
+                            //    }
+                            //    (string Texts, string Urls) = await getAndFormatTextsAndUrlsFromDocs(docs);
+                            //    Console.WriteLine("Finished retrieval and augmentation");
+
+                            //    tokenSource.Cancel(); // Stop animation
+
+                            //    await GPTResponse(message.Text, Texts);
+                            //    await UIRealTimeReponse(batch);
+
+                            //    Console.WriteLine("Finished generating response");
+
+                            //    Message docmsg = await botClient.SendMessage(
+                            //        chatId,
+                            //        $"{Texts}{Urls}",
+                            //        replyParameters: messageId
+                            //    );
+                            //    Console.WriteLine($"Finished processing {message.Id}");
+                            //}
+                            return;
                         }
-                        return;
-                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
-        catch (Exception ex)
+        public static async Task<PriorityIp> HandleMessage(JSONMessage message)
         {
-            Console.WriteLine(ex.ToString());
+            Console.WriteLine($"Started processing {message.Id}"); // Start of preparations for processing
+
+            chatId = message.Chatid;
+            gpt_response = "";
+            batch = "";
+
+            Message msg_to_edit = await _botClient.SendMessage(
+                chatId,
+                "_",
+                replyParameters: message.Id
+            );
+            messageId = msg_to_edit.MessageId; // End of preparations
+
+            // Cancellation token source for cancellation. Make sure to dispose after use (which is done here through the using expression).
+            using var tokenSource = new CancellationTokenSource();
+
+            // The cancellation token will be used to communicate cancellation to tasks
+            var token = tokenSource.Token;
+            UIRandomPhrasesAnimation(token, ["...Пожалуйста, подождите..."], 500);
+            if (telegramBotDebug) await Task.Delay(5000);
+
+            Console.WriteLine($"Starting retrieval and augmentation.\nOriginal query: {message.Text}");
+            string formatedMessage = await BroadenQuery(message.Text);
+            Console.WriteLine($"Broadened & paraphrased query: {formatedMessage}");
+
+            List<HttpRetriever.RetrieverDocument> docs = await GetDocumentsFromServer(formatedMessage);
+            Console.WriteLine("Original docs:");
+            foreach (HttpRetriever.Document doc in docs)
+            {
+                Console.WriteLine(doc.Value);
+            }
+            (string Texts, string Urls) = await getAndFormatTextsAndUrlsFromDocs(docs);
+            Console.WriteLine("Finished retrieval and augmentation");
+
+            tokenSource.Cancel(); // Stop animation
+
+            await GPTResponse(message.Text, Texts);
+            await UIRealTimeReponse();
+            Console.WriteLine("Finished generating response");
+
+            Message docmsg = await SendDocsToUser(Texts, "Релевантные документы:");
+            Message URLmsg = await _botClient.SendMessage(
+                chatId,
+                Urls,
+                replyParameters: messageId
+            );
+            Console.WriteLine($"Finished processing {message.Id}");
+            return prioritizedIp;
         }
-    }
-    static string LoremIpsum(int times) // Returns LoremIpsum repeated <times> amount
-    {
-        return string.Concat(Enumerable.Repeat("Lorem ipsum dolor sit amet, consectetur adipiscing elit.", times));
-    }
-    static async Task<(string, string)> getAndFormatTextsAndUrlsFromDocs(List<HttpRetriever.RetrieverDocument> docs)
-    {
-        string resultTexts = "";
-        string resultUrls = "";
-        int counter = 1;
-        List<string> urls = new();
-        List<string> texts = new();
-        foreach (HttpRetriever.RetrieverDocument doc in docs)
+        static async Task<Message> SendDocsToUser(string docs, string msg)
         {
-            urls.Add(doc.Url);
-            texts.Add(doc.Value);
+            var buffer = Encoding.UTF8.GetBytes(docs);
+            await using var ms = new MemoryStream(buffer);
+            return await _botClient.SendDocument(chatId, InputFile.FromStream(ms, "Релевантные документы.txt"),
+                                                 msg, replyParameters: messageId);
         }
-        texts = telegramBotDebug ? texts : await TheGPT.SummarizeDocs(texts);
-        var sumedDocs = texts.Zip(urls);
-        foreach (var doc in sumedDocs) 
+        static async Task UIRandomPhrasesAnimation(CancellationToken ct, string[] phrases, int animationSpeed)
         {
-            resultTexts += $"Документ {counter}) {doc.First}\n";
-            resultUrls += $"{doc.Second}\n";
-            counter++;
+            Random rnd = new();
+            while (true)
+            {
+                string phrase = phrases[rnd.Next(0, phrases.Length)];
+                string[] frames = new string[phrase.Length * 2];
+                int lenOfSplit = phrase.Length;
+                frames[0] = phrase[0].ToString();
+                frames[lenOfSplit * 2 - 1] = frames[0];
+                for (int i = 1; i < lenOfSplit; i++)
+                {
+                    frames[i] = frames[i - 1] + phrase[i].ToString();
+                    frames[lenOfSplit * 2 - i - 1] = frames[i];
+                }
+                await UIAnimateWait(ct, frames, animationSpeed);
+                if (ct.IsCancellationRequested)
+                {
+                    ct.ThrowIfCancellationRequested();
+                }
+            }
         }
-        return (resultTexts, resultUrls);
-    }
-    static async Task<List<HttpRetriever.RetrieverDocument>> GetDocumentsFromServer(string query)
-    {
-        if (!telegramBotDebug)
-        {
-            return await HttpRetriever.PostQuery(query);
-        }
-        List<HttpRetriever.RetrieverDocument> docs = new();
-        for (int i = 0; i < 6; i++)
-        {
-            docs.Add(new HttpRetriever.RetrieverDocument(LoremIpsum(1), "https://youtu.be/dQw4w9WgXcQ"));
-        }
-        return docs;
-    }
-    static async Task<string> BroadenQuery(string query)
-    {
-        if (!telegramBotDebug)
-        {
-            return await TheGPT.GPTTaskGetter(TheGPT.TaskType.Broaden, query, true);
-        }
-        return LoremIpsum(1);
-    }
-    static async Task GPTResponse(string user_input, string docs)
-    {
-        if (!telegramBotDebug)
-        {
-            await TheGPT.GetResponse(user_input, docs);
-        }
-        else
-        {
-            await UIValidator(LoremIpsum(10));
-        }
-    }
-    static async Task UIAnimateWait(CancellationToken ct, string[] animation, int animationSpeed)
-    {
-        while (true)
+        static async Task UIAnimateWait(CancellationToken ct, string[] animation, int animationSpeed)
         {
             foreach (string frame in animation)
             {
@@ -228,66 +299,123 @@ class Program
                 {
                     await _botClient.EditMessageText(chatId, messageId, frame);
                 }
-                catch (Exception) { Console.WriteLine("Failed to show a frame!"); }
+                catch (Exception e)
+                {
+                    if (e.Message != "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message")
+                    {
+                        Console.WriteLine($"Failed to show a frame ({frame})!:\n{e.Message}");
+                    }
+                }
                 await Task.Delay(animationSpeed);
             }
         }
-    }
-    static int wordCount(string text)
-    {
-        var regex = new Regex(string.Format(@"\b?\b"),
-                          RegexOptions.IgnoreCase);
-        return regex.Matches(text).Count;
-    }
-    public static async Task UIValidator(string sent_response)
-    {
-        batch += sent_response;
-        if (wordCount(batch) > batch_size)
+        static async Task<(string, string)> getAndFormatTextsAndUrlsFromDocs(List<HttpRetriever.RetrieverDocument> docs)
         {
-            currentMessageSize += batch.Length;
-            if(currentMessageSize > 4096)
+            string resultTexts = "";
+            string resultUrls = "";
+            int counter = 1;
+            List<string> urls = new();
+            List<string> texts = new();
+            foreach (HttpRetriever.RetrieverDocument doc in docs)
             {
-                currentMessageSize = 0 + batch.Length;
-                Message msg_to_edit = await _botClient.SendMessage(
-                    chatId,
-                    "_"
-                );
-                messageId = msg_to_edit.MessageId;
-                gpt_response = batch;
+                urls.Add($"{doc.Url}");
+                texts.Add($"{doc.Value}");
             }
-            await UIRealTimeReponse(batch);
+            texts = telegramBotDebug || !useSummarizer ? texts : await TheGPT.SummarizeDocs(texts);
+            var sumedDocs = texts.Zip(urls);
+            foreach (var doc in sumedDocs)
+            {
+                resultTexts += $"Документ {counter}: {doc.First}\n\n";
+                resultUrls += $"{doc.Second}\n";
+                counter++;
+            }
+            return (resultTexts, resultUrls);
         }
-    }
-    static async Task UIRealTimeReponse(string sent_response)
-    {
-        sent_response = TheGPT.CleanResponse(sent_response, false);
-        Console.WriteLine(sent_response);
-        gpt_response += sent_response;
-        bool flag = true;
-        try
+        static async Task<List<HttpRetriever.RetrieverDocument>> GetDocumentsFromServer(string query)
         {
-            await _botClient.EditMessageText(chatId, messageId, gpt_response);
+            if (!telegramBotDebug)
+            {
+                return await HttpRetriever.PostQuery(query);
+            }
+            List<HttpRetriever.RetrieverDocument> docs = new();
+            for (int i = 0; i < 6; i++)
+            {
+                docs.Add(new HttpRetriever.RetrieverDocument(Instruments.LoremIpsum(1), "https://youtu.be/dQw4w9WgXcQ"));
+            }
+            return docs;
         }
-        catch (Exception)
+        static async Task<string> BroadenQuery(string query)
         {
-            Console.WriteLine("Failed to edit message in one attempt! Batch won't be cleared.");
-            flag = false;
+            if (!telegramBotDebug)
+            {
+                return await TheGPT.GPTTaskGetter(TheGPT.TaskType.Broaden, query, true);
+            }
+            return Instruments.LoremIpsum(1);
         }
-        if (flag)
+        static async Task GPTResponse(string user_input, string docs)
         {
-            batch = "";
+            if (!telegramBotDebug)
+            {
+                await TheGPT.GetResponse(user_input, docs);
+            }
+            else
+            {
+                await UIValidator(Instruments.LoremIpsum(10));
+            }
         }
-    }
-    static Task ErrorHandler(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
-    {
-        var ErrorMessage = error switch
+        public static async Task UIValidator(string sent_response)
         {
-            ApiRequestException apiRequestException
-                => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
-            _ => error.ToString()
-        };
+            batch += sent_response;
+            if (Instruments.CountWords(batch) > batch_size)
+                await UIRealTimeReponse();
+        }
+        static async Task UIRealTimeReponse()
+        {
+            while (true)
+            {
+                string sent_response = TheGPT.CleanResponse(batch, false);
+                Console.WriteLine(sent_response);
+                gpt_response += sent_response;
+                bool flag = true;
+                try
+                {
+                    await _botClient.EditMessageText(chatId, messageId, gpt_response);
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Failed to edit message! Batch won't be cleared. Exception: {e.Message}");
+                    if (e.Message == "Bad Request: MESSAGE_TOO_LONG")
+                    {
+                        gpt_response = "";
+                        Message msg_to_edit = await _botClient.SendMessage(
+                            chatId,
+                            "_",
+                            replyParameters: messageId
+                        );
+                        messageId = msg_to_edit.MessageId;
+                        continue;
+                    }
+                    flag = false;
+                    await Task.Delay(1000);
+                    if (batch != "") continue;
+                }
+                if (flag)
+                    batch = "";
+                break;
+            }
 
-        Console.WriteLine(ErrorMessage);
-        return Task.CompletedTask;
+        }
+        static Task ErrorHandler(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
+        {
+            var ErrorMessage = error switch
+            {
+                ApiRequestException apiRequestException
+                    => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
+                _ => error.ToString()
+            };
+
+            Console.WriteLine(ErrorMessage);
+            return Task.CompletedTask;
+        }
     }
 }

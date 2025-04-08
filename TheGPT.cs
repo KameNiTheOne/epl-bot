@@ -8,7 +8,7 @@ namespace TelegramBotik
 {
     public static class TheGPT
     {
-        static string modelPath = @"C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
+        static string modelPath = @"C:\Users\alext\Downloads\gemma-3-4b-it-Q5_K_M.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
         static InferenceParams? inferenceParams;
         static string patternToTrim = @"(\bUser\W)|(\bAssistant\W)|(\bSystem\W)";
         static SessionState resetState;
@@ -27,27 +27,31 @@ namespace TelegramBotik
         }
         public static void Initialize(uint _ContextSize, int _GpuLayerCount)
         {
-            ModelParams parameters = new ModelParams(modelPath)
+            if (!Program.telegramBotDebug)
             {
-                ContextSize = _ContextSize, // The longest length of chat as memory.
-                GpuLayerCount = _GpuLayerCount // How many layers to offload to GPU. Please adjust it according to your GPU memory.
-            };
+                ModelParams parameters = new ModelParams(modelPath)
+                {
+                    ContextSize = _ContextSize, // The longest length of chat as memory.
+                    GpuLayerCount = _GpuLayerCount // How many layers to offload to GPU. Please adjust it according to your GPU memory.
+                };
 
-            LLamaWeights model = LLamaWeights.LoadFromFile(parameters);
-            LLamaContext context = model.CreateContext(parameters);
+                LLamaWeights model = LLamaWeights.LoadFromFile(parameters);
+                LLamaContext context = model.CreateContext(parameters);
 
-            InteractiveExecutor executor = new InteractiveExecutor(context);
+                InteractiveExecutor executor = new InteractiveExecutor(context);
 
-            ChatHistory new_history = new();
-            resetState = new ChatSession(executor, new_history).GetSessionState();
+                ChatHistory new_history = new();
+                resetState = new ChatSession(executor, new_history).GetSessionState();
 
-            mainsession = new(executor, new_history);
+                mainsession = new(executor, new_history);
 
-            inferenceParams = new InferenceParams()
-            { // No more than 256 tokens should appear in answer. Remove it if antiprompt is enough for control.
-                SamplingPipeline = new DefaultSamplingPipeline() { Temperature = 0.75f },
-                AntiPrompts = new List<string> {"User:", "System:", "User: ", "System: ", "\nUser:", "\nSystem:", "\nUser: ", "\nSystem: "} // Stop generation once antiprompts appear.
-            };
+                inferenceParams = new InferenceParams()
+                { // No more than 256 tokens should appear in answer. Remove it if antiprompt is enough for control.
+                    SamplingPipeline = new DefaultSamplingPipeline() { Temperature = 0.75f },
+                    AntiPrompts = new List<string> { "User:", "System:", "User: ", "System: ", "\nUser:", "\nSystem:", "\nUser: ", "\nSystem: " } // Stop generation once antiprompts appear.
+                };
+                Console.WriteLine("*** Инициализация GPT завершена! ***\n");
+            }
         }
         static async Task onGPTTask()
         {
@@ -101,7 +105,7 @@ namespace TelegramBotik
 
             foreach (string id in Configuration.MainConfig.GPTHosts.Keys)
             {
-                tasks[HttpRetriever.Post(@$"http://{Configuration.MainConfig.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
+                tasks[Instruments.Post(@$"http://{Configuration.MainConfig.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
                 docs.RemoveAt(0);
                 order.Add((id, "None"));
             }
@@ -114,7 +118,7 @@ namespace TelegramBotik
                 order[index] = (order[index].Item1, await finishedTask);
 
                 tasks.Remove(finishedTask);
-                tasks[HttpRetriever.Post(@$"http://{Configuration.MainConfig.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
+                tasks[Instruments.Post(@$"http://{Configuration.MainConfig.GPTHosts[id]}:9111", @"/summarize", new HttpRetriever.Document(docs.First()))] = id;
                 docs.RemoveAt(0);
                 order.Add((id, "None"));
             }
