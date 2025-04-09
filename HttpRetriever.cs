@@ -12,19 +12,23 @@ namespace TelegramBotik.instruments
             public List<string> Texts { get; set; }
             [JsonProperty("urls")]
             public List<string> Urls { get; set; }
+            [JsonProperty("titles")]
+            public List<string> Titles { get; set; }
             public Documents()
             {
                 Texts = new List<string>();
                 Urls = new List<string>();
+                Titles = new List<string>();
             }
             public List<RetrieverDocument> GetDocuments()
             {
                 using var texts = Texts.GetEnumerator();
                 using var urls = Urls.GetEnumerator();
+                using var titles = Titles.GetEnumerator();
                 List<RetrieverDocument> result = new();
-                while (texts.MoveNext() && urls.MoveNext())
+                while (texts.MoveNext() && urls.MoveNext() && titles.MoveNext())
                 {
-                    result.Add(new RetrieverDocument(texts.Current, urls.Current));
+                    result.Add(new RetrieverDocument(texts.Current, urls.Current, titles.Current));
                 }
                 return result;
             }
@@ -48,9 +52,11 @@ namespace TelegramBotik.instruments
         public class RetrieverDocument : Document
         {
             public string Url { get; set; } = string.Empty;
-            public RetrieverDocument(string _value, string _url) : base(_value)
+            public string Title { get; set; } = string.Empty;
+            public RetrieverDocument(string _value, string _url, string _title) : base(_value)
             {
                 Url = _url;
+                Title = _title;
             }
         }
         private class Text

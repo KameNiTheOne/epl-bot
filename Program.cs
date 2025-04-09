@@ -19,10 +19,6 @@ namespace TelegramBotik
             return new JSONMessage { Chatid = msg.Chat.Id, Id = msg.Id, Text = msg.Text };
         }
     }
-    public class LocalIP
-    {
-        public string IP { get; set; }
-    }
     class Program
     {
         // Это клиент для работы с Telegram Bot API, который позволяет отправлять сообщения, управлять ботом, подписываться на обновления и многое другое.
@@ -35,27 +31,27 @@ namespace TelegramBotik
         static PriorityIp prioritizedIp;
         static CancellationTokenSource cts;
 
-        //Булевые переменные для конфигурации главного сервера
-        public static bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
-        static bool useSummarizer = false; // Сокращать документы или нет
-        public static bool useSummarizerCluster = false; // Использовать кластер для сокращения или нет
-        public static bool useLocalConfig = false; // Не загружать конфиг с теоеграма, а использовать локальный
+        //Булевые константы для конфигурации главного сервера
+        public const bool telegramBotDebug = false; // Режим для разработки фич телеграм бота без GPT функций, чтобы включить, поменять на true
+        const bool useSummarizer = false; // Сокращать документы или нет
+        public const bool useSummarizerCluster = false; // Использовать кластер для сокращения или нет
+        public const bool useLocalConfig = false; // Не загружать конфиг с теоеграма, а использовать локальный
 
-        //Булевые переменные для выбора режимов сервера, True на какой-либо из превращает данную сессию в ячейку кластера
-        static bool isGPTSummarizer = false; // Режим кластерного сокращения документов
+        //Булевые константы для выбора режимов сервера, True на какой-либо из превращает данную сессию в ячейку кластера
+        const bool isGPTSummarizer = false; // Режим кластерного сокращения документов
 
-        //Переменные для настройки бота и GPT
-        public static uint contextSize = 16000; // Кол-во токенов, которые может обработать GPT
-        public static int layersToGPU = 16; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай
-        static string GPTHostID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
-        static int batch_size = 17;
+        //Константы для настройки бота и GPT
+        public const uint contextSize = 16000; // Кол-во токенов, которые может обработать GPT
+        public const int layersToGPU = 16; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай
+        const string GPTHostID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
+        const int batch_size = 18;
 
-        static async Task Main()
+        static async Task Main() // Начало выполнения программы
         {
-            cts = new CancellationTokenSource();
+            cts = new CancellationTokenSource(); // Источник токенов для выхода из программы при Ctrl+C
 
-            Instruments.httpClient = new HttpClient() { Timeout = TimeSpan.FromSeconds(600) };
-
+            Instruments.httpClient = new HttpClient() { Timeout = TimeSpan.FromSeconds(600) }; // Инициализируем httpClient, который будет принимать и посылать запросы серверам.
+                                                                                               // Задержка 10 минут, чтобы запросы не сбрасывались после долгого отсутствия ответа.
             await Configuration.Load();
 
             Console.CancelKeyPress += new ConsoleCancelEventHandler(OnExit);
@@ -71,7 +67,8 @@ namespace TelegramBotik
                 if (!await MainServer.isAlreadyActive())
                 {
                     priority = Priority.High;
-                    MainServer.Initialize(cts.Token);
+
+                    MainServer.Initialize(cts.Token); // Инициируем главный сервер - сервер-дистрибьютор и слушатель входящих сообщений
                     Configuration.MainConfig.MainIP = Instruments.GetLocalIPAddress();
                     Configuration.IsCurrentConfigDifferent();
                     ReceiverOptions _receiverOptions = new ReceiverOptions
@@ -99,7 +96,7 @@ namespace TelegramBotik
                 Configuration.IsCurrentConfigDifferent();
             }
 
-            GPTServer.Initialize(isGPTSummarizer);
+            GPTServer.Initialize(isGPTSummarizer, cts.Token); // Инициируем сервер-обработчик сообщений
 
             await Task.Delay(100);
             Console.WriteLine($"\nБита Сатоши запущен! Чтобы выйти из программы, нажми CTRL+C.");
@@ -114,6 +111,7 @@ namespace TelegramBotik
             cts.Cancel();
             cts.Dispose();
             Console.WriteLine("Exiting application...");
+            Environment.Exit(0);
         }
         /// <summary>
         /// Displays active debug modes (bools) and such in console.
@@ -144,60 +142,6 @@ namespace TelegramBotik
                                 message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
                                 MainServer.DistributeMessage(JSONMessage.FromMeassage(message));
                             }
-                            //Message message = update.Message;
-                            //message.Text = message.Text is null ? "a" : message.Text;
-                            //if (message.Text.StartsWith("@SatoshisBat_bot"))
-                            //{
-                            //    Console.WriteLine($"Started processing {message.Id}"); // Start of preparations for processing
-                            //    message.Text = message.Text.Remove(0, 16);
-                            //    message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
-
-                            //    chatId = message.Chat.Id;
-                            //    gpt_response = "";
-                            //    batch = "";
-
-                            //    Message msg_to_edit = await botClient.SendMessage(
-                            //        chatId,
-                            //        "_",
-                            //        replyParameters: message.Id
-                            //    );
-                            //    messageId = msg_to_edit.MessageId; // End of preparations
-
-                            //    // Cancellation token source for cancellation. Make sure to dispose after use (which is done here through the using expression).
-                            //    using var tokenSource = new CancellationTokenSource();
-
-                            //    // The cancellation token will be used to communicate cancellation to tasks
-                            //    var token = tokenSource.Token;
-                            //    UIRandomPhrasesAnimation(token, ["...Обрабатываю документы..."], 500);
-                            //    if (telegramBotDebug) await Task.Delay(100000);
-
-                            //    Console.WriteLine($"Starting retrieval and augmentation.\nOriginal query: {message.Text}");
-                            //    string formatedMessage = await BroadenQuery(message.Text);
-                            //    Console.WriteLine($"Broadened & paraphrased query: {formatedMessage}");
-
-                            //    List<HttpRetriever.RetrieverDocument> docs = await GetDocumentsFromServer(formatedMessage);
-                            //    Console.WriteLine("Original docs:");
-                            //    foreach (HttpRetriever.Document doc in docs)
-                            //    {
-                            //        Console.WriteLine(doc.Value);
-                            //    }
-                            //    (string Texts, string Urls) = await getAndFormatTextsAndUrlsFromDocs(docs);
-                            //    Console.WriteLine("Finished retrieval and augmentation");
-
-                            //    tokenSource.Cancel(); // Stop animation
-
-                            //    await GPTResponse(message.Text, Texts);
-                            //    await UIRealTimeReponse(batch);
-
-                            //    Console.WriteLine("Finished generating response");
-
-                            //    Message docmsg = await botClient.SendMessage(
-                            //        chatId,
-                            //        $"{Texts}{Urls}",
-                            //        replyParameters: messageId
-                            //    );
-                            //    Console.WriteLine($"Finished processing {message.Id}");
-                            //}
                             return;
                         }
                 }
@@ -313,21 +257,21 @@ namespace TelegramBotik
         {
             string resultTexts = "";
             string resultUrls = "";
-            int counter = 1;
             List<string> urls = new();
             List<string> texts = new();
+            List<string> titles = new();
             foreach (HttpRetriever.RetrieverDocument doc in docs)
             {
-                urls.Add($"{doc.Url}");
-                texts.Add($"{doc.Value}");
+                urls.Add(doc.Url);
+                texts.Add(doc.Value);
+                titles.Add(doc.Title);
             }
             texts = telegramBotDebug || !useSummarizer ? texts : await TheGPT.SummarizeDocs(texts);
-            var sumedDocs = texts.Zip(urls);
+            var sumedDocs = texts.Zip(urls, titles);
             foreach (var doc in sumedDocs)
             {
-                resultTexts += $"Документ {counter}: {doc.First}\n\n";
-                resultUrls += $"{doc.Second}\n";
-                counter++;
+                resultTexts += $"{doc.Third}: {doc.First}\n\n";
+                resultUrls += $"{doc.Third}: {doc.Second}\n";
             }
             return (resultTexts, resultUrls);
         }
@@ -340,7 +284,7 @@ namespace TelegramBotik
             List<HttpRetriever.RetrieverDocument> docs = new();
             for (int i = 0; i < 6; i++)
             {
-                docs.Add(new HttpRetriever.RetrieverDocument(Instruments.LoremIpsum(1), "https://youtu.be/dQw4w9WgXcQ"));
+                docs.Add(new HttpRetriever.RetrieverDocument(Instruments.LoremIpsum(1), "https://youtu.be/dQw4w9WgXcQ", "Статья 228"));
             }
             return docs;
         }

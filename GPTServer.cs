@@ -8,11 +8,11 @@ namespace TelegramBotik
 {
     public static class GPTServer
     {
-        public static void Initialize(bool isGPTSummarizer)
+        public static void Initialize(bool isGPTSummarizer, CancellationToken ct)
         {
             var builder = WebApplication.CreateBuilder();
             string localip = Instruments.GetLocalIPAddress();
-            builder.WebHost.UseUrls(@$"http://{localip}:9111");
+            builder.WebHost.UseUrls(@$"http://{localip}:{MainServer.nodePort}");
             WebApplication app = builder.Build();
             string info;
 
@@ -37,7 +37,7 @@ namespace TelegramBotik
             }
 
             Console.WriteLine($"Запущена ячейка кластера {info}.\nip сервера:{localip}");
-            app.RunAsync();
+            app.StartAsync(ct);
         }
     }
 }

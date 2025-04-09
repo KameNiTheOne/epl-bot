@@ -2,7 +2,6 @@
 using Telegram.Bot.Types;
 using Newtonsoft.Json;
 using System.Text;
-using CommunityToolkit.HighPerformance;
 
 namespace TelegramBotik.instruments
 {

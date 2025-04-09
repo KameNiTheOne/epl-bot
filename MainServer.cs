@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using System.IO.Pipelines;
 using TelegramBotik.instruments;
 
 namespace TelegramBotik
@@ -18,10 +17,12 @@ namespace TelegramBotik
     }
     public static class MainServer
     {
+        const int mainPort = 1337;
+        public const int nodePort = 9111;
+
         static Queue<JSONMessage> messages = new();
         static List<Task<PriorityIp>> currentlyHandling = new();
         static PriorityQueue<PriorityIp, int> ips = new();
-        static int mainPort = 1337;
         public static void Initialize(CancellationToken ct)
         {
             var builder = WebApplication.CreateBuilder();
@@ -39,7 +40,7 @@ namespace TelegramBotik
             Console.WriteLine($"Данная сессия выбрана Главной.\nip сервера:{localip}");
 
             AsyncHandleMessages(ct);
-            app.RunAsync();
+            app.StartAsync(ct);
         }
         public static void DistributeMessage(JSONMessage msg)
         {
@@ -62,11 +63,10 @@ namespace TelegramBotik
                 if (ips.Count != 0 && messages.TryDequeue(out JSONMessage msg))
                 {
                     PriorityIp pIp = ips.Dequeue();
-                    currentlyHandling.Add(Instruments.PostRequestObject<PriorityIp, JSONMessage>($@"http://{pIp.Ip}:9111", "/handleMessage", msg));
+                    currentlyHandling.Add(Instruments.PostRequestObject<PriorityIp, JSONMessage>($@"http://{pIp.Ip}:{nodePort}", "/handleMessage", msg));
                 }
                 if (currentlyHandling.Count != 0)
                 {
-                    Console.WriteLine("AAAAAAAAAAAAAAAAAAAAAA");
                     Task<PriorityIp> finishedTask = await Task.WhenAny(currentlyHandling);
 
                     PriorityIp pIp = await finishedTask;

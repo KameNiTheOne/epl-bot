@@ -8,9 +8,10 @@ namespace TelegramBotik
 {
     public static class TheGPT
     {
-        static string modelPath = @"C:\Users\alext\Downloads\gemma-3-4b-it-Q5_K_M.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
+        const string modelPath = @"C:\Users\alext\Downloads\gemma-3-4b-it-Q5_K_M.gguf"; // change it to your own model path. "C:\Users\alext\Downloads\gemma-2-9b-it-Q5_K_M.gguf"
+        const string patternToTrim = @"(\bUser\W)|(\bAssistant\W)|(\bSystem\W)";
+
         static InferenceParams? inferenceParams;
-        static string patternToTrim = @"(\bUser\W)|(\bAssistant\W)|(\bSystem\W)";
         static SessionState resetState;
         static ChatSession mainsession;
         public class TaskType // Enumerator type class
