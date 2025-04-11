@@ -18,7 +18,6 @@ namespace TelegramBotik
     public static class MainServer
     {
         const int mainPort = 1337;
-        public const int nodePort = 9111;
 
         static Queue<JSONMessage> messages = new();
         static List<Task<PriorityIp>> currentlyHandling = new();
@@ -63,7 +62,7 @@ namespace TelegramBotik
                 if (ips.Count != 0 && messages.TryDequeue(out JSONMessage msg))
                 {
                     PriorityIp pIp = ips.Dequeue();
-                    currentlyHandling.Add(Instruments.PostRequestObject<PriorityIp, JSONMessage>($@"http://{pIp.Ip}:{nodePort}", "/handleMessage", msg));
+                    currentlyHandling.Add(Instruments.PostRequestObject<PriorityIp, JSONMessage>($@"http://{pIp.Ip}:{GPTServer.nodePort}", "/handleMessage", msg));
                 }
                 if (currentlyHandling.Count != 0)
                 {

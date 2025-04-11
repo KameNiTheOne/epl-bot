@@ -41,7 +41,7 @@ namespace TelegramBotik
         const bool isGPTSummarizer = false; // Режим кластерного сокращения документов
 
         //Константы для настройки бота и GPT
-        public const uint contextSize = 16000; // Кол-во токенов, которые может обработать GPT
+        public const uint contextSize = 24000; // Кол-во токенов, которые может обработать GPT
         public const int layersToGPU = 16; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай
         const string GPTHostID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
         const int batch_size = 18;

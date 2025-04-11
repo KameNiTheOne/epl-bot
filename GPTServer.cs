@@ -8,11 +8,12 @@ namespace TelegramBotik
 {
     public static class GPTServer
     {
+        public const int nodePort = 9111;
         public static void Initialize(bool isGPTSummarizer, CancellationToken ct)
         {
             var builder = WebApplication.CreateBuilder();
             string localip = Instruments.GetLocalIPAddress();
-            builder.WebHost.UseUrls(@$"http://{localip}:{MainServer.nodePort}");
+            builder.WebHost.UseUrls(@$"http://{localip}:{nodePort}");
             WebApplication app = builder.Build();
             string info;
 
