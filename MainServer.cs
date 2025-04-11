@@ -66,16 +66,20 @@ namespace TelegramBotik
                 }
                 if (currentlyHandling.Count != 0)
                 {
-                    Task<PriorityIp> finishedTask = await Task.WhenAny(currentlyHandling);
+                    foreach (Task<PriorityIp> task in currentlyHandling)
+                    {
+                        if (task.IsCompleted)
+                        {
+                            PriorityIp pIp = await task;
+                            Console.WriteLine($"{pIp.Ip} Finished executing");
 
-                    PriorityIp pIp = await finishedTask;
-                    Console.WriteLine($"{pIp.Ip} Finished executing");
-
-                    currentlyHandling.Remove(finishedTask);
-                    ips.Enqueue(pIp, (int)pIp.Priority);
-                    Console.WriteLine(ips.Count);
+                            currentlyHandling.Remove(task);
+                            ips.Enqueue(pIp, (int)pIp.Priority);
+                            Console.WriteLine(ips.Count);
+                        }
+                    }
                 }
-                await Task.Delay(200);
+                await Task.Delay(500);
             }
         }
         public static async Task<bool> isAlreadyActive()

@@ -17,7 +17,7 @@ namespace TelegramBotik.instruments
                 if (ip.AddressFamily == AddressFamily.InterNetwork)
                 {
                     if (ip.ToString().StartsWith("192"))
-                        continue
+                        continue;
                     return ip.ToString();
                 }
             }
