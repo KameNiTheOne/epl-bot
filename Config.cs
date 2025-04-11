@@ -105,6 +105,7 @@ namespace TelegramBotik.instruments
                 Console.WriteLine($"Current config does not match main config! Saving changes to {pathToConfig}. Sending config to chat.");
                 SaveConfig();
                 if (!Program.useLocalConfig) await ConfigRetriever.SendConfig(pathToConfig);
+                downloadedConfig = Config.DeepCopy(MainConfig);
                 return;
             }
             Console.WriteLine("Config of current application matches main config.");
