@@ -42,9 +42,9 @@ namespace TelegramBotik
 
         //Константы для настройки бота и GPT
         public const uint contextSize = 24000; // Кол-во токенов, которые может обработать GPT
-        public const int layersToGPU = 16; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай
+        public const int layersToGPU = 10; // Часть GPT, которую обрабатывает видеокарта, см. диспетчер задач, если использующаяся память превышает колв-о выделенной памяти, уменьшай
         const string GPTHostID = "1"; // уникальный id GPT для суммаризации, замените на любое натуральное число
-        const int batch_size = 18;
+        const int batch_size = 36; // 36
 
         static async Task Main() // Начало выполнения программы
         {
@@ -325,11 +325,22 @@ namespace TelegramBotik
                 {
                     await _botClient.EditMessageText(chatId, messageId, gpt_response);
                 }
-                catch (Exception e)
+                catch (ApiRequestException e)
                 {
+                    flag = false;
                     Console.WriteLine($"Failed to edit message! Batch won't be cleared. Exception: {e.Message}");
+                    if (e.ErrorCode == 429)
+                    {
+                        int retryAfterSeconds = e.Parameters.RetryAfter.Value;
+                        Console.WriteLine($"Retry after {retryAfterSeconds} seconds.");
+
+                        await Task.Delay(retryAfterSeconds * 1000);
+                        batch = "";
+                        break;
+                    }
                     if (e.Message == "Bad Request: MESSAGE_TOO_LONG")
                     {
+                        await Task.Delay(500);
                         gpt_response = "";
                         Message msg_to_edit = await _botClient.SendMessage(
                             chatId,
@@ -337,9 +348,9 @@ namespace TelegramBotik
                             replyParameters: messageId
                         );
                         messageId = msg_to_edit.MessageId;
+                        await Task.Delay(500);
                         continue;
                     }
-                    flag = false;
                     await Task.Delay(1000);
                     if (batch != "") continue;
                 }
@@ -347,7 +358,6 @@ namespace TelegramBotik
                     batch = "";
                 break;
             }
-
         }
         static Task ErrorHandler(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
         {
