@@ -66,7 +66,8 @@ namespace TelegramBotik
                 }
                 if (currentlyHandling.Count != 0)
                 {
-                    foreach (Task<PriorityIp> task in currentlyHandling)
+                    List<Task<PriorityIp>> tempHandling = new(currentlyHandling);
+                    foreach (Task<PriorityIp> task in tempHandling)
                     {
                         if (task.IsCompleted)
                         {
