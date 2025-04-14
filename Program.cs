@@ -136,9 +136,9 @@ namespace TelegramBotik
                         {
                             Message message = update.Message;
                             message.Text = message.Text is null ? "a" : message.Text;
-                            if (message.Text.StartsWith("@SatoshisBat_bot"))
+                            if (message.Text.StartsWith("@SofaJuristBot"))
                             {
-                                message.Text = message.Text.Remove(0, 16);
+                                message.Text = message.Text.Remove(0, 14);
                                 message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
                                 MainServer.DistributeMessage(JSONMessage.FromMeassage(message));
                             }
@@ -190,7 +190,7 @@ namespace TelegramBotik
             tokenSource.Cancel(); // Stop animation
 
             await GPTResponse(message.Text, Texts);
-            await UIRealTimeReponse();
+            await UIRealTimeResponse();
             Console.WriteLine("Finished generating response");
 
             Message docmsg = await SendDocsToUser(Texts, "Релевантные документы:");
@@ -311,9 +311,9 @@ namespace TelegramBotik
         {
             batch += sent_response;
             if (Instruments.CountWords(batch) > batch_size)
-                await UIRealTimeReponse();
+                await UIRealTimeResponse();
         }
-        static async Task UIRealTimeReponse()
+        static async Task UIRealTimeResponse()
         {
             while (true)
             {
