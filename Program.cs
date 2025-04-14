@@ -136,9 +136,9 @@ namespace TelegramBotik
                         {
                             Message message = update.Message;
                             message.Text = message.Text is null ? "a" : message.Text;
-                            if (message.Text.StartsWith("@SatoshisBat_bot"))
+                            if (message.Text.StartsWith("@SofaJuristBot"))
                             {
-                                message.Text = message.Text.Remove(0, 16);
+                                message.Text = message.Text.Remove(0, 14);
                                 message.Text = TheGPT.CleanResponse(message.Text); // Clean message from user
                                 MainServer.DistributeMessage(JSONMessage.FromMeassage(message));
                             }
